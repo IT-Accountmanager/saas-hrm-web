@@ -193,7 +193,7 @@ export const LeaveManagementPage: React.FC = () => {
     return matchesType && matchesStatus;
   });
 
-  const handleApplyLeaveSubmit = (e: React.FormEvent) => {
+  const handleApplyLeaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newRecord: LeaveRecordItem = {
       id: leaveRecords.length + 1,
@@ -205,6 +205,18 @@ export const LeaveManagementPage: React.FC = () => {
       reason,
     };
     setLeaveRecords([newRecord, ...leaveRecords]);
+    try {
+      await leaveService.applyLeave({
+        employeeName: currentUser?.name || 'Rahul Sharma',
+        leaveType: newLeaveType as any,
+        startDate,
+        endDate,
+        reason,
+        status: 'Pending',
+      });
+    } catch (err) {
+      console.error('Failed to persist leave request via service:', err);
+    }
     setIsApplyModalOpen(false);
     setReason('');
   };

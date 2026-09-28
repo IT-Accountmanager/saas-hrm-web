@@ -34,7 +34,9 @@ export const Sidebar: React.FC = () => {
     currentRole,
     currentOrg?.subscribedModules,
     currentOrg?.disabledSubModules,
-    activeContext
+    activeContext,
+    currentUser,
+    currentOrg
   );
   const currentPersona = ROLE_PERSONAS[currentRole] || ROLE_PERSONAS.employee;
 
