@@ -1,31 +1,31 @@
 import { useAppStore } from '../store/useAppStore';
 import { CorporateModuleId } from '../types/saasModules';
+import { roleService } from '../services/roleService';
+import { PermissionAction } from '../types/rbac';
 
 export function useSubModuleAccess() {
-    const { currentRole, currentOrg } = useAppStore();
+    const { currentUser, currentOrg, currentRole } = useAppStore();
 
     const isSubModuleEnabled = (
         moduleId: CorporateModuleId,
-        subModuleName?: string
+        subModuleName?: string,
+        action: PermissionAction = 'read'
     ): boolean => {
-        // SaaS owner has full access to all submodules
+        // SaaS owner has global unrestricted access to all submodules
         if (currentRole === 'saas_owner') return true;
 
-        // Check if main module is subscribed
-        if (currentOrg?.subscribedModules && !currentOrg.subscribedModules.includes(moduleId)) {
-            return false;
-        }
+        // Perform full intersection check (SaaS Org Subscriptions ∩ Dynamic Role Permissions ∩ Action Capabilities)
+        const check = roleService.checkUserPermission(
+            currentUser,
+            currentOrg,
+            moduleId,
+            subModuleName,
+            action
+        );
 
-        // Check if subModuleName is disabled
-        if (subModuleName && currentOrg?.disabledSubModules?.[moduleId]) {
-            const disabledList = currentOrg.disabledSubModules[moduleId] || [];
-            if (disabledList.includes(subModuleName)) {
-                return false;
-            }
-        }
-
-        return true;
+        return check.allowed;
     };
 
     return { isSubModuleEnabled };
 }
+

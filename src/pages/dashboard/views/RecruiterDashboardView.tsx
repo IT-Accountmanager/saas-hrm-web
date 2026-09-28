@@ -45,10 +45,12 @@ import {
   OnboardingHandover,
 } from '../../../types';
 import { useAppStore } from '../../../store/useAppStore';
+import { useSubModuleAccess } from '../../../hooks/useSubModuleAccess';
 
 export const RecruiterDashboardView: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser } = useAppStore();
+  const { isSubModuleEnabled } = useSubModuleAccess();
 
   const recruiterName =
     currentUser?.role === 'recruiter' && currentUser.name
@@ -127,7 +129,7 @@ export const RecruiterDashboardView: React.FC = () => {
   const joiningPendingCount = handovers.filter((h) => h.handoverStatus === 'Ready for Handover').length;
   const positionsFilledCount = candidates.filter((c) => c.stage === 'Hired' || c.stage === 'Joined').length + 7;
 
-  const kpis = [
+  const allKpis = [
     {
       id: 'open-positions',
       title: 'Open Positions',
@@ -139,6 +141,7 @@ export const RecruiterDashboardView: React.FC = () => {
       color: 'text-blue-600 dark:text-blue-400',
       bgColor: 'bg-blue-50 dark:bg-blue-950/60',
       path: '/recruiter/jobs',
+      subModule: 'Job creation & publishing',
     },
     {
       id: 'active-reqs',
@@ -151,6 +154,7 @@ export const RecruiterDashboardView: React.FC = () => {
       color: 'text-indigo-600 dark:text-indigo-400',
       bgColor: 'bg-indigo-50 dark:bg-indigo-950/60',
       path: '/recruiter/requisitions',
+      subModule: 'Job requisitions',
     },
     {
       id: 'total-candidates',
@@ -163,6 +167,7 @@ export const RecruiterDashboardView: React.FC = () => {
       color: 'text-purple-600 dark:text-purple-400',
       bgColor: 'bg-purple-50 dark:bg-purple-950/60',
       path: '/recruiter/candidates',
+      subModule: 'Candidate database',
     },
     {
       id: 'new-apps',
@@ -175,6 +180,7 @@ export const RecruiterDashboardView: React.FC = () => {
       color: 'text-pink-600 dark:text-pink-400',
       bgColor: 'bg-pink-50 dark:bg-pink-950/60',
       path: '/recruiter/applications',
+      subModule: 'Application tracking',
     },
     {
       id: 'interviews-week',
@@ -187,6 +193,7 @@ export const RecruiterDashboardView: React.FC = () => {
       color: 'text-amber-600 dark:text-amber-400',
       bgColor: 'bg-amber-50 dark:bg-amber-950/60',
       path: '/recruiter/interviews',
+      subModule: 'Interview scheduling',
     },
     {
       id: 'offers-pending',
@@ -199,6 +206,7 @@ export const RecruiterDashboardView: React.FC = () => {
       color: 'text-cyan-600 dark:text-cyan-400',
       bgColor: 'bg-cyan-50 dark:bg-cyan-950/60',
       path: '/recruiter/offers',
+      subModule: 'Selection & offer management',
     },
     {
       id: 'joining-pending',
@@ -211,6 +219,7 @@ export const RecruiterDashboardView: React.FC = () => {
       color: 'text-teal-600 dark:text-teal-400',
       bgColor: 'bg-teal-50 dark:bg-teal-950/60',
       path: '/recruiter/handover',
+      subModule: 'Joining & onboarding handover',
     },
     {
       id: 'positions-filled',
@@ -223,23 +232,28 @@ export const RecruiterDashboardView: React.FC = () => {
       color: 'text-emerald-600 dark:text-emerald-400',
       bgColor: 'bg-emerald-50 dark:bg-emerald-950/60',
       path: '/recruiter/pipeline',
+      subModule: 'Recruitment analytics',
     },
   ];
 
+  const kpis = allKpis.filter((kpi) => isSubModuleEnabled('recruitment_management', kpi.subModule, 'read'));
+
   // 11-Stage Recruitment Funnel
-  const funnelStages = [
-    { name: 'Manpower Req', count: 5, path: '/recruiter/manpower-requirements', color: 'from-blue-600 to-blue-500' },
-    { name: 'Requisition', count: 4, path: '/recruiter/requisitions', color: 'from-blue-500 to-indigo-500' },
-    { name: 'Job Published', count: 4, path: '/recruiter/jobs', color: 'from-indigo-500 to-indigo-600' },
-    { name: 'Applications', count: 96, path: '/recruiter/applications', color: 'from-indigo-600 to-purple-500' },
-    { name: 'Screening', count: 42, path: '/recruiter/screening', color: 'from-purple-500 to-purple-600' },
-    { name: 'Shortlisted', count: 24, path: '/recruiter/candidates?tab=shortlisted', color: 'from-purple-600 to-pink-500' },
-    { name: 'Interview', count: 14, path: '/recruiter/interviews', color: 'from-pink-500 to-pink-600' },
-    { name: 'Selected', count: 6, path: '/recruiter/candidates?stage=Selected', color: 'from-pink-600 to-amber-500' },
-    { name: 'Offer', count: 4, path: '/recruiter/offers', color: 'from-amber-500 to-amber-600' },
-    { name: 'Joined', count: 3, path: '/recruiter/candidates?tab=hired', color: 'from-amber-600 to-teal-500' },
-    { name: 'Handover', count: 3, path: '/recruiter/handover', color: 'from-teal-500 to-emerald-600' },
+  const allFunnelStages = [
+    { name: 'Manpower Req', count: 5, path: '/recruiter/manpower-requirements', color: 'from-blue-600 to-blue-500', subModule: 'Manpower requirements' },
+    { name: 'Requisition', count: 4, path: '/recruiter/requisitions', color: 'from-blue-500 to-indigo-500', subModule: 'Job requisitions' },
+    { name: 'Job Published', count: 4, path: '/recruiter/jobs', color: 'from-indigo-500 to-indigo-600', subModule: 'Job creation & publishing' },
+    { name: 'Applications', count: 96, path: '/recruiter/applications', color: 'from-indigo-600 to-purple-500', subModule: 'Application tracking' },
+    { name: 'Screening', count: 42, path: '/recruiter/screening', color: 'from-purple-500 to-purple-600', subModule: 'Screening & shortlisting' },
+    { name: 'Shortlisted', count: 24, path: '/recruiter/candidates?tab=shortlisted', color: 'from-purple-600 to-pink-500', subModule: 'Candidate database' },
+    { name: 'Interview', count: 14, path: '/recruiter/interviews', color: 'from-pink-500 to-pink-600', subModule: 'Interview scheduling' },
+    { name: 'Selected', count: 6, path: '/recruiter/candidates?stage=Selected', color: 'from-pink-600 to-amber-500', subModule: 'Interview evaluation' },
+    { name: 'Offer', count: 4, path: '/recruiter/offers', color: 'from-amber-500 to-amber-600', subModule: 'Selection & offer management' },
+    { name: 'Joined', count: 3, path: '/recruiter/candidates?tab=hired', color: 'from-amber-600 to-teal-500', subModule: 'Joining & onboarding handover' },
+    { name: 'Handover', count: 3, path: '/recruiter/handover', color: 'from-teal-500 to-emerald-600', subModule: 'Joining & onboarding handover' },
   ];
+
+  const funnelStages = allFunnelStages.filter((stage) => isSubModuleEnabled('recruitment_management', stage.subModule, 'read'));
 
   // Sourcing Channels data for chart
   const sourcingData = [
@@ -375,48 +389,102 @@ export const RecruiterDashboardView: React.FC = () => {
       <DashboardHeroBanner
         actions={
           <>
-            <button
-              onClick={() => setIsPostJobOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-xs font-bold text-white px-3 py-1.5 shadow-sm shadow-blue-500/20 transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Create Job</span>
-            </button>
+            {isSubModuleEnabled('recruitment_management', 'Job creation & publishing', 'create') && (
+              <button
+                onClick={() => setIsPostJobOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-xs font-bold text-white px-3 py-1.5 shadow-sm shadow-blue-500/20 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Create Job</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => setIsNewReqOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/85 backdrop-blur-md px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700/60 shadow-2xs hover:shadow-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
-            >
-              <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-              <span>New Requisition</span>
-            </button>
+            {(isSubModuleEnabled('recruitment_management', 'Job requisitions', 'create') || isSubModuleEnabled('recruitment_management', 'Manpower requirements', 'create')) && (
+              <button
+                onClick={() => setIsNewReqOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/85 backdrop-blur-md px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700/60 shadow-2xs hover:shadow-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                <span>New Requisition</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => setIsAddCandOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/85 backdrop-blur-md px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700/60 shadow-2xs hover:shadow-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Users className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>Add Candidate</span>
-            </button>
+            {isSubModuleEnabled('recruitment_management', 'Candidate database', 'create') && (
+              <button
+                onClick={() => setIsAddCandOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/85 backdrop-blur-md px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700/60 shadow-2xs hover:shadow-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Users className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Add Candidate</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => setIsScheduleInterviewOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/85 backdrop-blur-md px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700/60 shadow-2xs hover:shadow-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Calendar className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-              <span>Schedule Interview</span>
-            </button>
+            {isSubModuleEnabled('recruitment_management', 'Interview scheduling', 'create') && (
+              <button
+                onClick={() => setIsScheduleInterviewOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/85 backdrop-blur-md px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700/60 shadow-2xs hover:shadow-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Calendar className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                <span>Schedule Interview</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => setIsCreateOfferOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/85 backdrop-blur-md px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700/60 shadow-2xs hover:shadow-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
-            >
-              <CreditCard className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-              <span>Create Offer</span>
-            </button>
+            {isSubModuleEnabled('recruitment_management', 'Selection & offer management', 'create') && (
+              <button
+                onClick={() => setIsCreateOfferOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/85 backdrop-blur-md px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700/60 shadow-2xs hover:shadow-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <CreditCard className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                <span>Create Offer</span>
+              </button>
+            )}
           </>
         }
       />
+
+      {/* RECRUITMENT OPERATING SYSTEM MODULE NAVIGATION BAR */}
+      <div className="bg-white dark:bg-dark-card border border-slate-200/80 dark:border-slate-800 rounded-2xl p-2 shadow-xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 px-1">
+          {[
+            { label: 'Overview', path: '/recruiter/dashboard', active: true, subModule: undefined },
+            { label: 'Manpower Reqs', path: '/recruiter/manpower-requirements', badge: '5', subModule: 'Manpower requirements' },
+            { label: 'Requisitions', path: '/recruiter/requisitions', badge: '3', subModule: 'Job requisitions' },
+            { label: 'Job Openings', path: '/recruiter/jobs', badge: '5', subModule: 'Job creation & publishing' },
+            { label: 'Candidates', path: '/recruiter/candidates', subModule: 'Candidate database' },
+            { label: 'CV Bank', path: '/recruiter/resumes', subModule: 'Resume management' },
+            { label: 'Screening', path: '/recruiter/screening', subModule: 'Screening & shortlisting' },
+            { label: 'ATS Pipeline', path: '/recruiter/pipeline', subModule: 'Recruitment pipeline' },
+            { label: 'Interviews', path: '/recruiter/interviews', badge: '6', subModule: 'Interview scheduling' },
+            { label: 'Scorecards', path: '/recruiter/evaluations', badge: '2', subModule: 'Interview evaluation' },
+            { label: 'Offer Letters', path: '/recruiter/offers', badge: '3', subModule: 'Selection & offer management' },
+            { label: 'Pre-Onboarding', path: '/recruiter/handover', badge: '3', subModule: 'Joining & onboarding handover' },
+            { label: 'Analytics', path: '/recruiter/analytics', subModule: 'Recruitment analytics' },
+          ]
+            .filter((navItem) => !navItem.subModule || isSubModuleEnabled('recruitment_management', navItem.subModule, 'read'))
+            .map((navItem) => (
+              <button
+                key={navItem.label}
+                onClick={() => navigate(navItem.path)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl whitespace-nowrap transition-all cursor-pointer ${navItem.active
+                  ? 'bg-blue-600 text-white shadow-xs font-bold'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+              >
+                <span>{navItem.label}</span>
+                {navItem.badge && (
+                  <span
+                    className={`px-1.5 py-0.2 text-[10px] font-bold rounded-full ${navItem.active
+                      ? 'bg-blue-700 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      }`}
+                  >
+                    {navItem.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+        </div>
+      </div>
 
       {/* =========================================================================
           2. 8 COMPACT PROFESSIONAL KPI CARDS

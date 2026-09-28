@@ -332,11 +332,12 @@ function getRawNavigationForRole(role: UserRole, activeContext: 'organisation' |
           ]
         },
         {
-          sectionTitle: 'RECRUITMENT',
+          sectionTitle: 'RECRUITMENT & WORKFORCE',
           items: [
-            { title: 'Job Openings', href: '/recruitment/jobs', icon: Briefcase, badge: '5', moduleId: 'recruitment_management', subModule: 'Job creation & publishing' },
-            { title: 'Candidates', href: '/recruitment/candidates', icon: Users, moduleId: 'recruitment_management', subModule: 'Candidate database' },
-            { title: 'Interviews', href: '/recruitment/interviews', icon: Calendar, moduleId: 'recruitment_management', subModule: 'Interview scheduling' },
+            { title: 'Recruitment Operating System', href: '/recruiter/dashboard', icon: LayoutDashboard, moduleId: 'recruitment_management' },
+            { title: 'Job Openings & Requisitions', href: '/recruiter/jobs', icon: Briefcase, badge: '5', moduleId: 'recruitment_management', subModule: 'Job creation & publishing' },
+            { title: 'Candidates & ATS Pipeline', href: '/recruiter/candidates', icon: Users, badge: '148', moduleId: 'recruitment_management', subModule: 'Candidate database' },
+            { title: 'Interviews, Offers & Handover', href: '/recruiter/interviews', icon: Calendar, badge: '6', moduleId: 'recruitment_management', subModule: 'Interview scheduling' },
           ]
         },
         {

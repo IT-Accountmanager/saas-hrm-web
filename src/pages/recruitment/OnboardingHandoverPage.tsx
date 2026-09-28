@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { recruitmentService } from '../../services/recruitmentService';
+import { recruitmentCommunicationService } from '../../services/recruitmentCommunicationService';
+import { recruitmentWorkflowEngine } from '../../services/recruitmentWorkflowEngine';
 import { OnboardingHandover } from '../../types';
 import {
   Card,
@@ -28,6 +30,8 @@ import {
   RefreshCw,
   Send,
   Sparkles,
+  Mail,
+  ListTodo,
 } from 'lucide-react';
 import { formatDate } from '../../utils';
 
@@ -240,15 +244,15 @@ export const OnboardingHandoverPage: React.FC = () => {
               key={tab.key}
               onClick={() => setSearchParams({ tab: tab.key })}
               className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition whitespace-nowrap ${isActive
-                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
             >
               {tab.label}
               <span
                 className={`px-1.5 py-0.5 text-[10px] rounded-full ${isActive
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                   }`}
               >
                 {tab.count}
