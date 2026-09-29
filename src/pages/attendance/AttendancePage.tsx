@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import {
   CalendarCheck,
@@ -11,17 +10,33 @@ import {
   ChevronDown,
   ArrowUpRight,
   ArrowDownRight,
-  ArrowRight,
-  Check,
-  LogOut,
-  CalendarDays,
-  X,
+  Plus,
+  Gift,
+  FileSpreadsheet,
+  Upload,
+  Download,
+  Trash2,
+  Sparkles,
+  MapPin,
+  CheckCircle2,
+  AlertCircle,
   Search,
   Filter,
+  Users,
+  Video,
+  Layers,
+  Cake,
+  Phone,
+  Umbrella,
+  UserCheck,
+  Calendar as CalendarIcon
 } from 'lucide-react';
 import { cn } from '../../utils';
-import { Modal, Badge } from '../../components/ui';
+import { Modal, Badge, Button, Input, Select } from '../../components/ui';
 import { PageHeaderCard } from '../../components/common/PageHeaderCard';
+import { leaveService } from '../../services/leaveService';
+import { Holiday } from '../../types';
+import { downloadSampleHolidayExcelTemplate, parseHolidayFile, ParsedHolidayRow } from '../../utils/excelParser';
 
 interface DayAttendance {
   day: number;
@@ -32,47 +47,127 @@ interface DayAttendance {
   hours?: string;
 }
 
-export const AttendancePage: React.FC = () => {
-  const navigate = useNavigate();
-  const { isClockedIn } = useAppStore();
+interface CalendarEvent {
+  id: string;
+  day: number;
+  dateStr: string;
+  title: string;
+  time: string;
+  type: 'meeting' | 'discussion' | 'holiday' | 'review' | 'call' | 'birthday' | 'leave';
+  color: string;
+  textColor: string;
+}
 
-  const [currentMonthIndex, setCurrentMonthIndex] = useState(3); // 3 = April
-  const [selectedDay, setSelectedDay] = useState<number>(8);
+export const AttendancePage: React.FC = () => {
+  const { currentRole, isClockedIn } = useAppStore();
+  const isAdminOrOwner = ['org_admin', 'org_owner', 'saas_owner', 'hr_admin'].includes(currentRole);
+
+  // Active Main Tab inside Workspace: 'attendance' | 'events' | 'holidays'
+  const [activeTab, setActiveTab] = useState<'attendance' | 'events' | 'holidays'>('attendance');
+  const [isDayInspectorOpen, setIsDayInspectorOpen] = useState(false);
+
+  const [currentMonthIndex, setCurrentMonthIndex] = useState(8); // 8 = September 2026 (Current Live Month)
+  const [selectedDay, setSelectedDay] = useState<number>(29);
   const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
-  const [isFullCalendarModalOpen, setIsFullCalendarModalOpen] = useState(false);
+  const [notification, setNotification] = useState<string | null>(null);
+
+  // Modals
+  const [isAddEventModalOpen, setIsAddEventModalOpen] = useState(false);
+  const [isAddHolidayModalOpen, setIsAddHolidayModalOpen] = useState(false);
+  const [isImportExcelModalOpen, setIsImportExcelModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+
+  // Holidays state from storage/service
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [holidaySearchQuery, setHolidaySearchQuery] = useState('');
+  const [selectedHolidayYear, setSelectedHolidayYear] = useState('2026');
+
+  // New Event Form State
+  const [newEvent, setNewEvent] = useState({
+    title: '',
+    type: 'meeting' as CalendarEvent['type'],
+    day: 29,
+    time: '10:00 AM'
+  });
+
+  // New Holiday Form State
+  const [newHolidayTitle, setNewHolidayTitle] = useState('');
+  const [newHolidayDate, setNewHolidayDate] = useState('2026-09-29');
+  const [newHolidayType, setNewHolidayType] = useState<'Public' | 'Company' | 'Optional'>('Public');
+  const [newHolidayScope, setNewHolidayScope] = useState('Global / All Offices');
+  const [newHolidayDesc, setNewHolidayDesc] = useState('');
+
+  // Excel Import State
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [parsedRows, setParsedRows] = useState<ParsedHolidayRow[]>([]);
+  const [isParsing, setIsParsing] = useState(false);
+  const [importStats, setImportStats] = useState<{ valid: number; invalid: number }>({ valid: 0, invalid: 0 });
+
+  const showToast = (msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 3500);
+  };
+
+  const loadHolidays = async () => {
+    try {
+      const data = await leaveService.getHolidays();
+      setHolidays(data);
+    } catch (err) {
+      console.error('Failed to load holidays:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadHolidays();
+  }, []);
 
   const months = [
-    'January 2025',
-    'February 2025',
-    'March 2025',
-    'April 2025',
-    'May 2025',
-    'June 2025',
+    'January 2026',
+    'February 2026',
+    'March 2026',
+    'April 2026',
+    'May 2026',
+    'June 2026',
+    'July 2026',
+    'August 2026',
+    'September 2026',
+    'October 2026',
+    'November 2026',
+    'December 2026',
   ];
 
-  // Calendar days matching April 2025 in the reference image
-  // April 1, 2025 starts on Tuesday. March has 31 days (Sunday 30, Monday 31).
-  const aprilDays: DayAttendance[] = [
+  // Scheduled Events List directly embedded into Attendance Calendar
+  const [events, setEvents] = useState<CalendarEvent[]>([
+    { id: '1', day: 1, dateStr: 'Sep 01, 2026', title: 'Team Sprint Sync', time: '10:00 AM', type: 'meeting', color: 'bg-blue-50 text-blue-700 border-blue-200', textColor: 'text-blue-700' },
+    { id: '2', day: 3, dateStr: 'Sep 03, 2026', title: 'Q3 Roadmap Review', time: '02:00 PM', type: 'review', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', textColor: 'text-emerald-700' },
+    { id: '3', day: 5, dateStr: 'Sep 05, 2026', title: 'Teachers Day Observance', time: 'Company Event', type: 'holiday', color: 'bg-purple-50 text-purple-700 border-purple-200', textColor: 'text-purple-700' },
+    { id: '4', day: 8, dateStr: 'Sep 08, 2026', title: 'Client Product Demo', time: '11:30 AM', type: 'call', color: 'bg-sky-50 text-sky-700 border-sky-200', textColor: 'text-sky-700' },
+    { id: '5', day: 11, dateStr: 'Sep 11, 2026', title: 'Rohit Sharma Birthday', time: 'All Day', type: 'birthday', color: 'bg-amber-50 text-amber-700 border-amber-200', textColor: 'text-amber-700' },
+    { id: '6', day: 14, dateStr: 'Sep 14, 2026', title: 'Hindi Diwas Holiday', time: 'Public Holiday', type: 'holiday', color: 'bg-purple-50 text-purple-700 border-purple-200', textColor: 'text-purple-700' },
+    { id: '7', day: 18, dateStr: 'Sep 18, 2026', title: 'Casual Leave - Rahul', time: 'Full Day', type: 'leave', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', textColor: 'text-indigo-700' },
+    { id: '8', day: 29, dateStr: 'Sep 29, 2026', title: 'Q3 Performance Review & All-Hands', time: '04:00 PM', type: 'review', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', textColor: 'text-emerald-700' },
+  ]);
+
+  // Attendance days matching September 2026
+  const currentMonthDays: DayAttendance[] = [
     { day: 30, month: 'prev' },
     { day: 31, month: 'prev' },
     { day: 1, month: 'current', status: 'present', checkIn: '09:05 AM', checkOut: '06:10 PM', hours: '9h 05m' },
     { day: 2, month: 'current', status: 'present', checkIn: '09:12 AM', checkOut: '06:05 PM', hours: '8h 53m' },
     { day: 3, month: 'current', status: 'present', checkIn: '08:58 AM', checkOut: '06:00 PM', hours: '9h 02m' },
-    { day: 4, month: 'current', status: 'absent' }, // Absent (Red dot)
+    { day: 4, month: 'current', status: 'absent' },
     { day: 5, month: 'current', status: 'present', checkIn: '09:15 AM', checkOut: '01:30 PM', hours: '4h 15m' },
     { day: 6, month: 'current', status: 'present', checkIn: '09:00 AM', checkOut: '06:00 PM', hours: '9h 00m' },
     { day: 7, month: 'current', status: 'present', checkIn: '09:10 AM', checkOut: '06:15 PM', hours: '9h 05m' },
-    { day: 8, month: 'current', status: 'present', checkIn: '09:12 AM', checkOut: '06:08 PM', hours: '8h 56m' }, // Selected day in image
+    { day: 8, month: 'current', status: 'present', checkIn: '09:12 AM', checkOut: '06:08 PM', hours: '8h 56m' },
     { day: 9, month: 'current', status: 'present', checkIn: '09:04 AM', checkOut: '06:11 PM', hours: '9h 07m' },
     { day: 10, month: 'current', status: 'present', checkIn: '09:18 AM', checkOut: '06:20 PM', hours: '9h 02m' },
-    { day: 11, month: 'current', status: 'leave' }, // Leave (Purple dot)
+    { day: 11, month: 'current', status: 'leave' },
     { day: 12, month: 'current', status: 'present', checkIn: '09:00 AM', checkOut: '06:00 PM', hours: '9h 00m' },
     { day: 13, month: 'current', status: 'present', checkIn: '09:14 AM', checkOut: '06:12 PM', hours: '8h 58m' },
     { day: 14, month: 'current', status: 'present', checkIn: '09:05 AM', checkOut: '06:08 PM', hours: '9h 03m' },
     { day: 15, month: 'current', status: 'present', checkIn: '09:11 AM', checkOut: '06:19 PM', hours: '9h 08m' },
-    { day: 16, month: 'current', status: 'absent' }, // Absent (Red dot)
+    { day: 16, month: 'current', status: 'absent' },
     { day: 17, month: 'current', status: 'present', checkIn: '09:02 AM', checkOut: '06:00 PM', hours: '8h 58m' },
     { day: 18, month: 'current', status: 'present', checkIn: '09:20 AM', checkOut: '06:25 PM', hours: '9h 05m' },
     { day: 19, month: 'current', status: 'present', checkIn: '09:05 AM', checkOut: '06:05 PM', hours: '9h 00m' },
@@ -81,7 +176,7 @@ export const AttendancePage: React.FC = () => {
     { day: 22, month: 'current', status: 'present', checkIn: '09:15 AM', checkOut: '06:18 PM', hours: '9h 03m' },
     { day: 23, month: 'current', status: 'present', checkIn: '09:00 AM', checkOut: '06:02 PM', hours: '9h 02m' },
     { day: 24, month: 'current', status: 'present', checkIn: '09:07 AM', checkOut: '06:10 PM', hours: '9h 03m' },
-    { day: 25, month: 'current', status: 'absent' }, // Absent (Red dot)
+    { day: 25, month: 'current', status: 'absent' },
     { day: 26, month: 'current', status: 'present', checkIn: '09:12 AM', checkOut: '06:15 PM', hours: '9h 03m' },
     { day: 27, month: 'current', status: 'present', checkIn: '09:00 AM', checkOut: '06:00 PM', hours: '9h 00m' },
     { day: 28, month: 'current', status: 'present', checkIn: '09:05 AM', checkOut: '06:10 PM', hours: '9h 05m' },
@@ -92,853 +187,698 @@ export const AttendancePage: React.FC = () => {
     { day: 3, month: 'next' },
   ];
 
-  const currentSelectedDayData = aprilDays.find(
+  const currentSelectedDayData = currentMonthDays.find(
     (d) => d.day === selectedDay && d.month === 'current'
   );
 
+  const currentSelectedDayEvents = events.filter((e) => e.day === selectedDay);
+
+  // Form Handlers
+  const handleAddEvent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEvent.title) return;
+
+    const created: CalendarEvent = {
+      id: Date.now().toString(),
+      day: Number(newEvent.day),
+      dateStr: `Sep ${String(newEvent.day).padStart(2, '0')}, 2026`,
+      title: newEvent.title,
+      time: newEvent.time,
+      type: newEvent.type,
+      color: 'bg-blue-50 text-blue-700 border-blue-200',
+      textColor: 'text-blue-700'
+    };
+
+    setEvents([...events, created]);
+    setIsAddEventModalOpen(false);
+    showToast(`Event "${newEvent.title}" added to calendar!`);
+    setNewEvent({ title: '', type: 'meeting', day: 15, time: '10:00 AM' });
+  };
+
+  const handleAddHolidaySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newHolidayTitle || !newHolidayDate) return;
+
+    try {
+      await leaveService.addHoliday({
+        name: newHolidayTitle,
+        date: newHolidayDate,
+        type: newHolidayType,
+        location: newHolidayScope,
+        description: newHolidayDesc,
+      });
+
+      setIsAddHolidayModalOpen(false);
+      setNewHolidayTitle('');
+      setNewHolidayDesc('');
+      showToast(`Holiday "${newHolidayTitle}" created successfully!`);
+      await loadHolidays();
+    } catch (err) {
+      console.error('Failed to create holiday:', err);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFile(file);
+    setIsParsing(true);
+    try {
+      const result = await parseHolidayFile(file);
+      setParsedRows(result.rows);
+      setImportStats({ valid: result.totalValid, invalid: result.totalInvalid });
+    } catch (err) {
+      console.error('Failed to parse Excel file:', err);
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const handleBulkImportConfirm = async () => {
+    const validItems = parsedRows.filter(r => r.isValid);
+    if (validItems.length === 0) return;
+
+    try {
+      await leaveService.bulkAddHolidays(validItems.map(item => ({
+        name: item.name,
+        date: item.date,
+        type: item.type,
+        location: item.location,
+        description: item.description,
+      })));
+
+      setIsImportExcelModalOpen(false);
+      setImportFile(null);
+      setParsedRows([]);
+      showToast(`Successfully imported ${validItems.length} holidays from Excel!`);
+      await loadHolidays();
+    } catch (err) {
+      console.error('Bulk import error:', err);
+    }
+  };
+
+  const handleDeleteHoliday = async (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to delete holiday "${name}"?`)) {
+      try {
+        await leaveService.deleteHoliday(id);
+        showToast(`Holiday "${name}" deleted.`);
+        await loadHolidays();
+      } catch (err) {
+        console.error('Failed to delete holiday:', err);
+      }
+    }
+  };
+
   return (
-    <div className="space-y-4 animate-page-enter">
-      {/* TOP HEADER: ICON + TITLE + SUBTITLE & 3D CLOCK/CALENDAR ILLUSTRATION WITH CLOUDY WAVES */}
+    <div className="space-y-4 animate-page-enter pb-12">
+      {/* Toast Notification */}
+      {notification && (
+        <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold animate-fade-in">
+          <CheckCircle2 className="h-4 w-4" />
+          <span>{notification}</span>
+        </div>
+      )}
+
+      {/* Header Card with Integrated Tab Controls */}
       <PageHeaderCard
-        title="Attendance Tracker"
-        subtitle="Track your daily attendance, view punch timestamps, and manage working hours."
+        title="Unified Attendance & Calendar Hub"
+        subtitle="Manage daily check-ins, scheduled events, working hours, and HR holiday schedules all in 1 place."
         icon={CalendarCheck}
-        badge={
-          <Badge variant="primary" size="sm">
-            {isClockedIn ? '● Currently Active' : 'Offline'}
-          </Badge>
-        }
+        badge={<Badge variant="primary">All-in-1 Workspace</Badge>}
         actions={
-          <div className="hidden md:flex items-center justify-end relative pr-2">
-            <div className="relative flex items-center justify-center">
-              {/* Ambient Multi-Tone Radiant Glow */}
-              <div className="absolute -inset-3 bg-gradient-to-r from-blue-500/25 via-sky-400/25 to-indigo-500/20 rounded-full blur-xl pointer-events-none" />
+          <div className="flex flex-wrap items-center gap-2.5">
+            {isAdminOrOwner && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsImportExcelModalOpen(true)}
+                className="font-bold shadow-xs flex items-center gap-1.5"
+              >
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Import Excel</span>
+              </Button>
+            )}
 
-              {/* Enlarged 3D Clock & Calendar Graphic */}
-              <svg width="170" height="90" viewBox="0 0 215 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-                {/* Soft Leaves Decorative Background */}
-                <path d="M12 68C22 52 40 58 46 76C32 82 20 80 12 68Z" fill="#93C5FD" fillOpacity="0.5" />
-                <path d="M198 30C185 18 168 25 162 44C178 50 192 46 198 30Z" fill="#60A5FA" fillOpacity="0.45" />
-                <path d="M210 58C194 48 184 62 186 80C202 78 208 70 210 58Z" fill="#38BDF8" fillOpacity="0.55" />
+            {isAdminOrOwner && (
+              <Button size="sm" onClick={() => setIsAddHolidayModalOpen(true)} className="font-bold shadow-xs">
+                <Plus className="h-4 w-4 mr-1" />
+                Add Holiday
+              </Button>
+            )}
 
-                {/* Sparkle Stars */}
-                <path d="M48 24L50 18L52 24L58 26L52 28L50 34L48 28L42 26L48 24Z" fill="#38BDF8" fillOpacity="0.8" />
-                <path d="M174 15L175.5 10L177 15L182 16.5L177 18L175.5 23L174 18L169 16.5L174 15Z" fill="#60A5FA" fillOpacity="0.75" />
-
-                {/* 3D Round Clock Base (Larger, High-Definition) */}
-                <g transform="translate(10, 0)">
-                  {/* Outer Shadow Bezel */}
-                  <circle cx="70" cy="56" r="42" fill="url(#clockOuterBezelGrad)" filter="url(#clockDropShadow)" />
-                  {/* Metallic Chrome Ring */}
-                  <circle cx="70" cy="56" r="38" fill="url(#clockMetallicRingGrad)" />
-                  {/* Dial Face Background */}
-                  <circle cx="70" cy="56" r="33" fill="#FFFFFF" />
-                  <circle cx="70" cy="56" r="33" fill="url(#clockDialSoftGrad)" />
-
-                  {/* Dial Hour Tick Marks */}
-                  <circle cx="70" cy="28" r="2" fill="#2563EB" />
-                  <circle cx="98" cy="56" r="2" fill="#2563EB" />
-                  <circle cx="70" cy="84" r="2" fill="#2563EB" />
-                  <circle cx="42" cy="56" r="2" fill="#2563EB" />
-
-                  {/* Additional subtle minute ticks */}
-                  <circle cx="84" cy="32" r="1" fill="#93C5FD" />
-                  <circle cx="94" cy="42" r="1" fill="#93C5FD" />
-                  <circle cx="94" cy="70" r="1" fill="#93C5FD" />
-                  <circle cx="84" cy="80" r="1" fill="#93C5FD" />
-                  <circle cx="56" cy="80" r="1" fill="#93C5FD" />
-                  <circle cx="46" cy="70" r="1" fill="#93C5FD" />
-                  <circle cx="46" cy="42" r="1" fill="#93C5FD" />
-                  <circle cx="56" cy="32" r="1" fill="#93C5FD" />
-
-                  {/* Clock Hands: 10:10 Aesthetic Position */}
-                  <line x1="70" y1="56" x2="52" y2="38" stroke="#1D4ED8" strokeWidth="3.5" strokeLinecap="round" filter="url(#handsShadow)" />
-                  <line x1="70" y1="56" x2="88" y2="44" stroke="#2563EB" strokeWidth="3" strokeLinecap="round" filter="url(#handsShadow)" />
-                  {/* Second Hand (Cyan Accent) */}
-                  <line x1="70" y1="56" x2="70" y2="28" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round" />
-
-                  {/* Center Chrome Nut */}
-                  <circle cx="70" cy="56" r="4" fill="#1E40AF" />
-                  <circle cx="70" cy="56" r="2" fill="#E2E8F0" />
-
-                  {/* Glossy Curved Glass Reflection Arc */}
-                  <path d="M 44 42 A 30 30 0 0 1 96 42 A 28 28 0 0 0 44 42 Z" fill="url(#clockGlossGrad)" opacity="0.6" />
-                </g>
-
-                {/* 3D Slanted Calendar (Enlarged, Rich isometric tilt) */}
-                <g transform="translate(112, 22) rotate(6)">
-                  {/* Drop shadow & Calendar Backboard */}
-                  <rect x="0" y="6" width="60" height="66" rx="10" fill="url(#calBaseGrad)" filter="url(#calDropShadow)" />
-                  
-                  {/* Deep Royal Blue Header Spine */}
-                  <rect x="0" y="0" width="60" height="20" rx="8" fill="url(#calHeaderGrad)" />
-                  
-                  {/* Silver / Metallic Binding Rings */}
-                  <circle cx="12" cy="3" r="3" fill="#F8FAFC" stroke="#1D4ED8" strokeWidth="1.5" />
-                  <circle cx="30" cy="3" r="3" fill="#F8FAFC" stroke="#1D4ED8" strokeWidth="1.5" />
-                  <circle cx="48" cy="3" r="3" fill="#F8FAFC" stroke="#1D4ED8" strokeWidth="1.5" />
-
-                  {/* Calendar Grid Status Pills & Dates */}
-                  {/* Row 1 */}
-                  <rect x="8" y="27" width="8" height="6" rx="2" fill="#93C5FD" opacity="0.6" />
-                  <rect x="20" y="27" width="8" height="6" rx="2" fill="#93C5FD" opacity="0.6" />
-                  <rect x="32" y="27" width="8" height="6" rx="2" fill="#10B981" />
-                  <rect x="44" y="27" width="8" height="6" rx="2" fill="#93C5FD" opacity="0.6" />
-
-                  {/* Row 2 */}
-                  <rect x="8" y="38" width="8" height="6" rx="2" fill="#93C5FD" opacity="0.6" />
-                  <rect x="20" y="38" width="8" height="6" rx="2" fill="#2563EB" />
-                  <rect x="32" y="38" width="8" height="6" rx="2" fill="#10B981" />
-                  <rect x="44" y="38" width="8" height="6" rx="2" fill="#8B5CF6" />
-
-                  {/* Row 3 */}
-                  <rect x="8" y="49" width="8" height="6" rx="2" fill="#10B981" />
-                  <rect x="20" y="49" width="8" height="6" rx="2" fill="#93C5FD" opacity="0.6" />
-                  <rect x="32" y="49" width="8" height="6" rx="2" fill="#2563EB" />
-                  <rect x="44" y="49" width="8" height="6" rx="2" fill="#10B981" />
-
-                  {/* Row 4 */}
-                  <rect x="8" y="60" width="8" height="5" rx="1.5" fill="#93C5FD" opacity="0.4" />
-                  <rect x="20" y="60" width="8" height="5" rx="1.5" fill="#93C5FD" opacity="0.4" />
-                  <rect x="32" y="60" width="8" height="5" rx="1.5" fill="#93C5FD" opacity="0.4" />
-                  <rect x="44" y="60" width="8" height="5" rx="1.5" fill="#93C5FD" opacity="0.4" />
-                </g>
-
-                {/* Floating 3D Check Badge over the setup */}
-                <g transform="translate(150, 75)" filter="url(#badgeShadow)">
-                  <rect x="0" y="0" width="54" height="20" rx="10" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1" />
-                  <circle cx="10" cy="10" r="5.5" fill="#10B981" />
-                  <path d="M8 10L9.5 11.5L12.5 8.5" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                  <text x="19" y="13.5" fill="#0F172A" fontSize="8.5" fontWeight="bold" fontFamily="sans-serif">Present</text>
-                </g>
-
-                <defs>
-                  {/* Clock Bezel & Dial Gradients */}
-                  <linearGradient id="clockOuterBezelGrad" x1="30" y1="20" x2="110" y2="100" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#38BDF8" />
-                    <stop offset="0.5" stopColor="#2563EB" />
-                    <stop offset="1" stopColor="#1E3A8A" />
-                  </linearGradient>
-                  <linearGradient id="clockMetallicRingGrad" x1="40" y1="24" x2="100" y2="92" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#F8FAFC" />
-                    <stop offset="0.5" stopColor="#E2E8F0" />
-                    <stop offset="1" stopColor="#CBD5E1" />
-                  </linearGradient>
-                  <linearGradient id="clockDialSoftGrad" x1="70" y1="23" x2="70" y2="89" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#FFFFFF" />
-                    <stop offset="1" stopColor="#EFF6FF" />
-                  </linearGradient>
-                  <linearGradient id="clockGlossGrad" x1="70" y1="30" x2="70" y2="50" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#FFFFFF" stopOpacity="0.8" />
-                    <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
-                  </linearGradient>
-
-                  {/* Calendar Gradients */}
-                  <linearGradient id="calBaseGrad" x1="0" y1="0" x2="60" y2="72" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#FFFFFF" />
-                    <stop offset="1" stopColor="#F8FAFC" />
-                  </linearGradient>
-                  <linearGradient id="calHeaderGrad" x1="0" y1="0" x2="60" y2="20" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#3B82F6" />
-                    <stop offset="1" stopColor="#1D4ED8" />
-                  </linearGradient>
-
-                  {/* High Fidelity Drop Shadows */}
-                  <filter id="clockDropShadow" x="18" y="8" width="104" height="104" filterUnits="userSpaceOnUse">
-                    <feDropShadow dx="0" dy="6" stdDeviation="6" floodColor="#1E40AF" floodOpacity="0.28" />
-                  </filter>
-                  <filter id="handsShadow" x="40" y="30" width="60" height="40" filterUnits="userSpaceOnUse">
-                    <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#0F172A" floodOpacity="0.25" />
-                  </filter>
-                  <filter id="calDropShadow" x="-6" y="0" width="76" height="84" filterUnits="userSpaceOnUse">
-                    <feDropShadow dx="0" dy="8" stdDeviation="6" floodColor="#1E40AF" floodOpacity="0.2" />
-                  </filter>
-                  <filter id="badgeShadow" x="-4" y="-2" width="64" height="28" filterUnits="userSpaceOnUse">
-                    <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.15" />
-                  </filter>
-                </defs>
-              </svg>
-            </div>
+            <Button size="sm" onClick={() => setIsAddEventModalOpen(true)} className="font-bold shadow-xs bg-indigo-600 hover:bg-indigo-700 text-white">
+              <Plus className="h-4 w-4 mr-1" />
+              Add Event
+            </Button>
           </div>
         }
       />
 
-      {/* =========================================================================
-          TOP 4 KPI STAT CARDS (COMPACT HEIGHT, BALANCED PADDING, SHARP ALIGNMENT)
-         ========================================================================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* 1. Present Days */}
-        <div className="rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-xs hover-card-lift transition-all duration-200 dark:border-dark-border dark:bg-dark-card flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 shadow-xs flex-shrink-0">
-              <CalendarCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
-                Present Days
-              </span>
-              <div className="flex items-baseline gap-1">
-                <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                  18
-                </span>
-              </div>
-              <span className="text-[10.5px] text-slate-400 block">This Month</span>
-            </div>
-          </div>
-          <div className="self-end pb-0.5">
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-              <ArrowUpRight className="h-3 w-3 stroke-[2.5]" /> 12%
-            </span>
-          </div>
+      {/* Unified Tab Navigation Switcher */}
+      <div className="flex flex-wrap items-center justify-between bg-white dark:bg-[#0F172A] p-2 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs gap-2">
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            onClick={() => setActiveTab('attendance')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'attendance'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            <span>Attendance Calendar</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('events')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'events'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <CalendarIcon className="w-4 h-4" />
+            <span>Events & Schedules ({events.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('holidays')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'holidays'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Gift className="w-4 h-4" />
+            <span>Holiday Management ({holidays.length})</span>
+          </button>
         </div>
 
-        {/* 2. Absent Days */}
-        <div className="rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-xs hover-card-lift transition-all duration-200 dark:border-dark-border dark:bg-dark-card flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-500 dark:bg-rose-950/60 dark:text-rose-400 shadow-xs flex-shrink-0">
-              <CalendarX className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
-                Absent Days
-              </span>
-              <div className="flex items-baseline gap-1">
-                <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                  2
-                </span>
-              </div>
-              <span className="text-[10.5px] text-slate-400 block">This Month</span>
-            </div>
-          </div>
-          <div className="self-end pb-0.5">
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
-              <ArrowDownRight className="h-3 w-3 stroke-[2.5]" /> 50%
-            </span>
-          </div>
-        </div>
-
-        {/* 3. Leave Days */}
-        <div className="rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-xs hover-card-lift transition-all duration-200 dark:border-dark-border dark:bg-dark-card flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400 shadow-xs flex-shrink-0">
-              <FileText className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
-                Leave Days
-              </span>
-              <div className="flex items-baseline gap-1">
-                <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                  1
-                </span>
-              </div>
-              <span className="text-[10.5px] text-slate-400 block">This Month</span>
-            </div>
-          </div>
-          <div className="self-end pb-0.5">
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-purple-50 px-1.5 py-0.5 text-[11px] font-bold text-purple-600 dark:bg-purple-950/40 dark:text-purple-400">
-              <ArrowUpRight className="h-3 w-3 stroke-[2.5]" /> 0%
-            </span>
-          </div>
-        </div>
-
-        {/* 4. Total Working Hours */}
-        <div className="rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-xs hover-card-lift transition-all duration-200 dark:border-dark-border dark:bg-dark-card flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 shadow-xs flex-shrink-0">
-              <Clock className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
-                Total Working Hours
-              </span>
-              <div className="flex items-baseline gap-1">
-                <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                  144.5 hrs
-                </span>
-              </div>
-              <span className="text-[10.5px] text-slate-400 block">This Month</span>
-            </div>
-          </div>
-          <div className="self-end pb-0.5">
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-              <ArrowUpRight className="h-3 w-3 stroke-[2.5]" /> 8%
-            </span>
-          </div>
-        </div>
+        <button
+          onClick={() => setIsReportModalOpen(true)}
+          className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 cursor-pointer"
+        >
+          <FileText className="w-3.5 h-3.5 text-blue-600" />
+          <span>Attendance Report</span>
+        </button>
       </div>
 
       {/* =========================================================================
-          MAIN 2-COLUMN SECTION:
-          LEFT: ATTENDANCE CALENDAR (WIDE)
-          RIGHT: TODAY'S ATTENDANCE + SUMMARY DONUT + RECENT ACTIVITY
+          TAB 1: ATTENDANCE CALENDAR (FULL-WIDTH GRID + MODAL DAY INSPECTOR)
          ========================================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-        
-        {/* =======================================================================
-            LEFT COLUMN: ATTENDANCE CALENDAR
-           ======================================================================= */}
-        <div className="lg:col-span-7 xl:col-span-8 rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs dark:border-dark-border dark:bg-dark-card flex flex-col justify-between">
+      {activeTab === 'attendance' && (
+        <div className="space-y-4">
           
-          {/* Card Header & Controls */}
-          <div className="flex items-center justify-between pb-4">
-            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-              Attendance Calendar
-            </h2>
-
-            <div className="flex items-center gap-2">
-              {/* Previous Month */}
-              <button
-                onClick={() => setCurrentMonthIndex((prev) => Math.max(0, prev - 1))}
-                disabled={currentMonthIndex === 0}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-dark-border dark:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer"
-                title="Previous month"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-
-              {/* Next Month */}
-              <button
-                onClick={() => setCurrentMonthIndex((prev) => Math.min(months.length - 1, prev + 1))}
-                disabled={currentMonthIndex === months.length - 1}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-dark-border dark:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer"
-                title="Next month"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-
-              {/* Month Dropdown Button */}
-              <div className="relative">
-                <button
-                  onClick={() => setMonthDropdownOpen(!monthDropdownOpen)}
-                  className="flex items-center gap-2 h-8 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-800 hover:bg-slate-50 dark:border-dark-border dark:bg-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
-                >
-                  <span>{months[currentMonthIndex]}</span>
-                  <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-                </button>
-
-                {monthDropdownOpen && (
-                  <div className="absolute right-0 mt-1 w-40 rounded-xl border border-slate-200 bg-white p-1 shadow-lg animate-toast-slide dark:border-dark-border dark:bg-dark-card z-30">
-                    {months.map((m, idx) => (
-                      <button
-                        key={m}
-                        onClick={() => {
-                          setCurrentMonthIndex(idx);
-                          setMonthDropdownOpen(false);
-                        }}
-                        className={cn(
-                          'w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                          currentMonthIndex === idx
-                            ? 'bg-blue-50 text-blue-600 font-bold dark:bg-blue-950/60 dark:text-blue-300'
-                            : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
-                        )}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Weekday Header Columns */}
-          <div className="grid grid-cols-7 gap-1.5 py-2 px-1 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl mb-2">
-            <div>Sun</div>
-            <div>Mon</div>
-            <div>Tue</div>
-            <div>Wed</div>
-            <div>Thu</div>
-            <div>Fri</div>
-            <div>Sat</div>
-          </div>
-
-          {/* 7-Column Calendar Grid Matrix */}
-          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-            {aprilDays.map((item, index) => {
-              const isSelected = item.month === 'current' && item.day === selectedDay;
-              const isOtherMonth = item.month !== 'current';
-
-              return (
-                <div
-                  key={index}
-                  onClick={() => {
-                    if (!isOtherMonth) setSelectedDay(item.day);
-                  }}
-                  className={cn(
-                    'h-14 sm:h-16 rounded-xl p-2 flex flex-col justify-between transition-all duration-150 relative cursor-pointer group',
-                    isOtherMonth
-                      ? 'bg-transparent text-slate-300 dark:text-slate-600 cursor-default opacity-60'
-                      : isSelected
-                      ? 'bg-blue-50/70 border-2 border-blue-600 dark:bg-blue-950/40 dark:border-blue-500 shadow-2xs'
-                      : 'border border-slate-100 bg-slate-50/30 hover:border-slate-300 hover:bg-white dark:border-slate-800/80 dark:bg-slate-900/30 dark:hover:bg-slate-800/60'
-                  )}
-                >
-                  {/* Top Day Number (Selected is a blue circle with white text) */}
-                  <div className="flex items-center justify-start">
-                    {isSelected ? (
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white font-bold text-xs shadow-xs">
-                        {item.day}
-                      </span>
-                    ) : (
-                      <span className={cn('text-xs font-semibold', isOtherMonth ? 'text-slate-300 dark:text-slate-600' : 'text-slate-700 dark:text-slate-200')}>
-                        {item.day}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Centered Status Dot */}
-                  <div className="flex items-center justify-center pb-1">
-                    {item.status === 'present' && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 ring-2 ring-emerald-100 dark:ring-emerald-950/80" />
-                    )}
-                    {item.status === 'absent' && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500 ring-2 ring-rose-100 dark:ring-rose-950/80" />
-                    )}
-                    {item.status === 'leave' && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-purple-500 ring-2 ring-purple-100 dark:ring-purple-950/80" />
-                    )}
-                  </div>
+          {/* Top 4 Stat Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            {/* 1. Present Days */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-2xs dark:border-slate-800 dark:bg-[#0F172A] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 shadow-2xs flex-shrink-0">
+                  <UserCheck className="h-5 w-5" />
                 </div>
-              );
-            })}
-          </div>
-
-          {/* Bottom Card Footer: Status Legends & View Full Calendar */}
-          <div className="mt-5 pt-4 border-t border-slate-100 dark:border-dark-border flex flex-wrap items-center justify-between gap-3 text-xs">
-            {/* Status Legend Pills */}
-            <div className="flex items-center gap-4 text-xs font-medium text-slate-600 dark:text-slate-300">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" /> Present
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-rose-500" /> Absent
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-purple-500" /> Leave
-              </span>
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">Present Days</span>
+                  <span className="text-xl font-black text-slate-900 dark:text-white">18</span>
+                  <span className="text-[10px] text-slate-400 block">This Month (90%)</span>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">↑ 12%</span>
             </div>
 
-            {/* View Full Calendar Link */}
-            <button
-              onClick={() => setIsFullCalendarModalOpen(true)}
-              className="flex items-center gap-1 text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold transition-colors cursor-pointer"
-            >
-              <span>View Full Calendar</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
+            {/* 2. Absent Days */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-2xs dark:border-slate-800 dark:bg-[#0F172A] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 shadow-2xs flex-shrink-0">
+                  <CalendarIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">Absent Days</span>
+                  <span className="text-xl font-black text-slate-900 dark:text-white">2</span>
+                  <span className="text-[10px] text-slate-400 block">This Month</span>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">↓ 50%</span>
+            </div>
 
-        {/* =======================================================================
-            RIGHT COLUMN: 3 STACKED CARDS
-            1. TODAY'S ATTENDANCE
-            2. ATTENDANCE SUMMARY (DONUT)
-            3. RECENT ACTIVITY
-           ======================================================================= */}
-        <div className="lg:col-span-5 xl:col-span-4 space-y-4">
-          
-          {/* 1. Today's Attendance Card */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs hover-card-lift transition-all duration-200 dark:border-dark-border dark:bg-dark-card space-y-3.5">
-            {/* Card Header */}
+            {/* 3. Leave Days */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-2xs dark:border-slate-800 dark:bg-[#0F172A] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400 shadow-2xs flex-shrink-0">
+                  <FileSpreadsheet className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">Leave Days</span>
+                  <span className="text-xl font-black text-slate-900 dark:text-white">1</span>
+                  <span className="text-[10px] text-slate-400 block">This Month</span>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">0%</span>
+            </div>
+
+            {/* 4. Total Working Hours */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-2xs dark:border-slate-800 dark:bg-[#0F172A] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 shadow-2xs flex-shrink-0">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">Working Hours</span>
+                  <span className="text-xl font-black text-slate-900 dark:text-white">144.5 hrs</span>
+                  <span className="text-[10px] text-slate-400 block">This Month</span>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">↑ 8%</span>
+            </div>
+          </div>
+
+          {/* Full-Width Attendance Calendar Grid */}
+          <div className="bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-2xs">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Today's Attendance
+                <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-blue-600" />
+                  Full-Width Attendance Calendar Grid
                 </h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Wed, Apr 08, 2025
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Click any date cell to open details for check-in/out timestamps and events.
                 </p>
               </div>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold text-xs border border-emerald-200/60 dark:border-emerald-800/60">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Present
-              </span>
-            </div>
 
-            {/* 3 Metric Boxes (Check In, Check Out, Working Hours) */}
-            <div className="space-y-2.5">
-              {/* Row: Check In & Check Out */}
-              <div className="grid grid-cols-2 gap-2.5">
-                {/* Check In */}
-                <div className="flex items-center gap-2.5 rounded-xl bg-blue-50/50 p-3 border border-blue-100/60 dark:bg-blue-950/20 dark:border-blue-900/30">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/60 dark:text-blue-300 flex-shrink-0">
-                    <Clock className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-medium block">
-                      Check In
-                    </span>
-                    <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white font-mono leading-tight">
-                      09:12 AM
-                    </span>
-                  </div>
-                </div>
-
-                {/* Check Out */}
-                <div className="flex items-center gap-2.5 rounded-xl bg-blue-50/50 p-3 border border-blue-100/60 dark:bg-blue-950/20 dark:border-blue-900/30">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/60 dark:text-blue-300 flex-shrink-0">
-                    <Clock className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-medium block">
-                      Check Out
-                    </span>
-                    <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white font-mono leading-tight">
-                      06:08 PM
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Full Width Box: Working Hours */}
-              <div className="flex items-center gap-3 rounded-xl bg-blue-50/50 p-3 border border-blue-100/60 dark:bg-blue-950/20 dark:border-blue-900/30">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/60 dark:text-blue-300 flex-shrink-0">
-                  <Clock className="h-4 w-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-medium block">
-                    Working Hours
-                  </span>
-                  <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white font-mono leading-tight">
-                    8h 56m
-                  </span>
-                </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setCurrentMonthIndex((prev) => Math.max(0, prev - 1))} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer">
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{months[currentMonthIndex]}</span>
+                <button onClick={() => setCurrentMonthIndex((prev) => Math.min(months.length - 1, prev + 1))} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer">
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
             </div>
-          </div>
 
-          {/* 2. Attendance Summary Card */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs hover-card-lift transition-all duration-200 dark:border-dark-border dark:bg-dark-card space-y-3.5">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Attendance Summary
-                </h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">This Month</p>
-              </div>
-              <button
-                onClick={() => setIsReportModalOpen(true)}
-                className="flex items-center gap-0.5 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline cursor-pointer"
-              >
-                <span>View Report</span>
-                <ArrowRight className="h-3 w-3" />
-              </button>
+            {/* Day Labels */}
+            <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-400 pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
             </div>
 
-            {/* Circular Donut & Breakdown Stats */}
-            <div className="flex items-center gap-5 pt-1">
-              {/* Left: SVG Circular Donut with 90% */}
-              <div className="relative flex items-center justify-center flex-shrink-0">
-                <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
-                  {/* Background Track Circle */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="#F1F5F9"
-                    strokeWidth="9"
-                    fill="transparent"
-                    className="dark:stroke-slate-800"
-                  />
-                  {/* Absent Arc (Red) */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="#EF4444"
-                    strokeWidth="9"
-                    strokeDasharray="251.2"
-                    strokeDashoffset="227"
-                    fill="transparent"
-                    strokeLinecap="round"
-                  />
-                  {/* Leave Arc (Purple) */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="#A855F7"
-                    strokeWidth="9"
-                    strokeDasharray="251.2"
-                    strokeDashoffset="240"
-                    fill="transparent"
-                    strokeLinecap="round"
-                  />
-                  {/* Present Arc (Green ~ 90%) */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="#10B981"
-                    strokeWidth="9"
-                    strokeDasharray="251.2"
-                    strokeDashoffset="35"
-                    fill="transparent"
-                    strokeLinecap="round"
-                    className="transition-all duration-700 ease-out"
-                  />
-                </svg>
-                {/* Center Percentage & Label */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                  <span className="text-xl font-black text-slate-900 dark:text-white leading-none">
-                    90%
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-medium leading-tight mt-0.5">
-                    Attendance Rate
-                  </span>
-                </div>
-              </div>
+            {/* Grid Cells - 100% Full Width */}
+            <div className="grid grid-cols-7 gap-2">
+              {currentMonthDays.map((item, idx) => {
+                const isSelected = item.day === selectedDay && item.month === 'current';
+                const dayEvts = item.month === 'current' ? events.filter(e => e.day === item.day) : [];
 
-              {/* Right: Legend Breakdown */}
-              <div className="flex-1 space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" /> Present
-                  </span>
-                  <span className="font-bold text-slate-900 dark:text-white">18 days</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                    <span className="h-2 w-2 rounded-full bg-rose-500" /> Absent
-                  </span>
-                  <span className="font-bold text-slate-900 dark:text-white">2 days</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                    <span className="h-2 w-2 rounded-full bg-purple-500" /> Leave
-                  </span>
-                  <span className="font-bold text-slate-900 dark:text-white">1 day</span>
-                </div>
-
-                <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-dark-border">
-                  <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-[11px]">
-                    <span className="h-2 w-2 rounded-full bg-blue-400" /> Total Working Days
-                  </span>
-                  <span className="font-bold text-slate-900 dark:text-white text-[11px]">21 days</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. Recent Activity Card */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs hover-card-lift transition-all duration-200 dark:border-dark-border dark:bg-dark-card space-y-3">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Recent Activity
-              </h3>
-              <button
-                onClick={() => setIsActivityModalOpen(true)}
-                className="flex items-center gap-0.5 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline cursor-pointer"
-              >
-                <span>View All</span>
-                <ArrowRight className="h-3 w-3" />
-              </button>
-            </div>
-
-            {/* List of Recent Activities */}
-            <div className="space-y-3 pt-1">
-              {/* Item 1: Checked In */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 shadow-2xs flex-shrink-0">
-                  <Check className="h-4 w-4 stroke-[3]" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-tight">
-                    Checked In
-                  </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Today, 09:12 AM
-                  </p>
-                </div>
-              </div>
-
-              {/* Item 2: Checked Out */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 shadow-2xs flex-shrink-0">
-                  <ArrowRight className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-tight">
-                    Checked Out
-                  </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Today, 06:08 PM
-                  </p>
-                </div>
-              </div>
-
-              {/* Item 3: Leave Approved */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400 shadow-2xs flex-shrink-0">
-                  <CalendarDays className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-tight">
-                    Leave Approved
-                  </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Apr 05, 2025 • Casual Leave
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* =========================================================================
-          INTERACTIVE MODALS FOR FULL CALENDAR & REPORT DETAIL VIEWS
-         ========================================================================= */}
-      {/* 1. Full Calendar Modal */}
-      <Modal
-        isOpen={isFullCalendarModalOpen}
-        onClose={() => setIsFullCalendarModalOpen(false)}
-        title="Full Attendance Calendar History"
-        description="Detailed record of monthly attendance, clock-in timings, and duration."
-        size="lg"
-      >
-        <div className="space-y-4">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-dark-border">
-            <span className="text-xs font-bold text-slate-800 dark:text-white">
-              April 2025 Comprehensive Breakdown
-            </span>
-            <span className="text-xs text-slate-400">Total: 30 days recorded</span>
-          </div>
-
-          <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-            {aprilDays
-              .filter((d) => d.month === 'current')
-              .map((d) => (
-                <div
-                  key={d.day}
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-dark-border text-xs"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white dark:bg-dark-card font-bold text-slate-700 dark:text-slate-200 shadow-2xs">
-                      {d.day}
-                    </span>
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-white">
-                        April {d.day}, 2025
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        {d.hours ? `Logged ${d.hours}` : d.status === 'absent' ? 'Absent recorded' : 'Approved Leave'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <span
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      if (item.month === 'current') {
+                        setSelectedDay(item.day);
+                        setIsDayInspectorOpen(true);
+                      }
+                    }}
                     className={cn(
-                      'px-2.5 py-0.5 rounded-full text-[10px] font-bold',
-                      d.status === 'present'
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-                        : d.status === 'absent'
-                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
-                        : 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300'
+                      'min-h-[110px] p-2 rounded-2xl border transition-all flex flex-col justify-between cursor-pointer space-y-1 hover:shadow-md',
+                      item.month !== 'current' && 'opacity-30 bg-slate-50 dark:bg-slate-900 border-transparent cursor-not-allowed',
+                      item.month === 'current' && !isSelected && 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-blue-500',
+                      isSelected && 'bg-blue-50/70 border-blue-600 dark:bg-blue-950/50 shadow-xs ring-2 ring-blue-500/30'
                     )}
                   >
-                    {d.status === 'present' ? 'Present' : d.status === 'absent' ? 'Absent' : 'Leave'}
+                    {/* Top Row: Day Number + Status Badge */}
+                    <div className="flex items-center justify-between">
+                      <span className={cn(
+                        'text-xs font-black',
+                        isSelected ? 'w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]' : 'text-slate-800 dark:text-slate-200'
+                      )}>
+                        {item.day}
+                      </span>
+
+                      {/* Status Badge Text */}
+                      {item.month === 'current' && item.status && (
+                        <span className={cn(
+                          'text-[9.5px] font-bold px-1.5 py-0.5 rounded-md capitalize',
+                          item.status === 'present' && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300',
+                          item.status === 'absent' && 'bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300',
+                          item.status === 'leave' && 'bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300'
+                        )}>
+                          {item.status}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Middle: Clock In & Clock Out Times */}
+                    {item.month === 'current' && item.checkIn && item.status === 'present' && (
+                      <div className="bg-slate-50 dark:bg-slate-800/80 p-1.5 rounded-xl border border-slate-100 dark:border-slate-700/60 text-[9.5px] font-semibold text-slate-600 dark:text-slate-300 space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400 text-[8.5px]">In:</span>
+                          <span className="font-mono font-bold text-slate-900 dark:text-white">{item.checkIn}</span>
+                        </div>
+                        {item.checkOut && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400 text-[8.5px]">Out:</span>
+                            <span className="font-mono font-bold text-slate-900 dark:text-white">{item.checkOut}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Bottom: Events & Holiday Badges */}
+                    {item.month === 'current' && (
+                      <div className="space-y-1">
+                        {dayEvts.map(evt => (
+                          <div
+                            key={evt.id}
+                            className={cn(
+                              'text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate flex items-center gap-1',
+                              evt.type === 'holiday' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200' : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                            )}
+                          >
+                            {evt.type === 'holiday' && <Gift className="w-2.5 h-2.5 flex-shrink-0 text-purple-600" />}
+                            <span className="truncate">{evt.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 2: EVENTS & SCHEDULES WORKSPACE
+         ========================================================================= */}
+      {activeTab === 'events' && (
+        <div className="space-y-4 animate-fade-in">
+          <div className="bg-white dark:bg-[#0F172A] p-5 rounded-3xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5 text-indigo-600" />
+                Scheduled Events & Company Agenda
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                View all company meetings, roadmap reviews, team birthdays, and official holidays.
+              </p>
+            </div>
+
+            <Button onClick={() => setIsAddEventModalOpen(true)} className="font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs">
+              <Plus className="w-4 h-4 mr-1.5" />
+              Schedule New Event
+            </Button>
+          </div>
+
+          {/* Event Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {events.map((evt) => (
+              <div key={evt.id} className="bg-white dark:bg-[#0F172A] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3 hover:border-indigo-400 transition-all">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-400 font-mono">{evt.dateStr}</span>
+                  <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full capitalize', evt.color)}>
+                    {evt.type}
                   </span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">{evt.title}</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{evt.time}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 2: HOLIDAY MANAGEMENT (HR / ADMIN CONTROL PANEL)
+         ========================================================================= */}
+      {activeTab === 'holidays' && (
+        <div className="space-y-4 animate-fade-in">
+          
+          {/* Controls Bar */}
+          <div className="bg-white dark:bg-[#0F172A] p-4 rounded-3xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Search holidays..."
+                  value={holidaySearchQuery}
+                  onChange={(e) => setHolidaySearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 focus:outline-none"
+                />
+              </div>
+
+              <select
+                value={selectedHolidayYear}
+                onChange={(e) => setSelectedHolidayYear(e.target.value)}
+                className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 font-semibold cursor-pointer"
+              >
+                <option value="2026">Calendar 2026 (Active)</option>
+                <option value="2025">Calendar 2025</option>
+                <option value="2024">Calendar 2024</option>
+                <option value="All">All Years</option>
+              </select>
+            </div>
+
+            {isAdminOrOwner && (
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => setIsImportExcelModalOpen(true)} className="font-bold">
+                  <FileSpreadsheet className="w-4 h-4 mr-1.5 text-emerald-600" />
+                  Import from Excel
+                </Button>
+                <Button size="sm" onClick={() => setIsAddHolidayModalOpen(true)} className="font-bold">
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Add Holiday
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Holidays List Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {holidays
+              .filter((h) => {
+                if (selectedHolidayYear !== 'All' && !h.date.startsWith(selectedHolidayYear)) return false;
+                if (holidaySearchQuery && !h.name.toLowerCase().includes(holidaySearchQuery.toLowerCase())) return false;
+                return true;
+              })
+              .map((h) => (
+                <div key={h.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-2xs space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className={cn(
+                        'px-2.5 py-0.5 rounded-full text-[10px] font-bold',
+                        h.type === 'Public' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
+                      )}>
+                        {h.type} Holiday
+                      </span>
+                      <h4 className="font-bold text-slate-900 dark:text-white text-base mt-2">{h.name}</h4>
+                      {h.description && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{h.description}</p>}
+                    </div>
+
+                    {isAdminOrOwner && (
+                      <button
+                        onClick={() => handleDeleteHoliday(h.id, h.name)}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      <CalendarIcon className="w-3.5 h-3.5 text-blue-500" />
+                      {h.date} ({h.day})
+                    </span>
+                    <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" /> {h.location || 'Global'}
+                    </span>
+                  </div>
                 </div>
               ))}
           </div>
+
         </div>
-      </Modal>
+      )}
 
-      {/* 2. Attendance Summary Report Modal */}
-      <Modal
-        isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
-        title="Monthly Attendance Summary Report"
-        description="Executive attendance metrics and departmental compliance rates."
-        size="md"
-      >
-        <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 text-xs space-y-1">
-            <p className="font-bold text-blue-900 dark:text-blue-300">
-              Attendance Performance: Excellent (90%)
-            </p>
-            <p className="text-slate-600 dark:text-slate-300">
-              You are currently above the required organizational minimum attendance standard of 85%.
-            </p>
-          </div>
+      {/* =========================================================================
+          MODALS: DAY INSPECTOR, ADD EVENT, ADD HOLIDAY, EXCEL IMPORT, REPORT
+         ========================================================================= */}
 
-          <div className="space-y-2.5 text-xs">
-            <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-dark-border">
-              <span className="text-slate-500">Total Scheduled Working Days</span>
-              <span className="font-bold text-slate-900 dark:text-white">21 days</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-dark-border">
-              <span className="text-slate-500">Days Present</span>
-              <span className="font-bold text-emerald-600">18 days (85.7%)</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-dark-border">
-              <span className="text-slate-500">Days Absent</span>
-              <span className="font-bold text-rose-600">2 days (9.5%)</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-dark-border">
-              <span className="text-slate-500">Approved Leaves</span>
-              <span className="font-bold text-purple-600">1 day (4.8%)</span>
-            </div>
-            <div className="flex justify-between py-1.5">
-              <span className="text-slate-500">Average Daily Working Hours</span>
-              <span className="font-bold text-blue-600">8h 48m</span>
-            </div>
-          </div>
-        </div>
-      </Modal>
-
-      {/* 3. Recent Activity Modal */}
-      <Modal
-        isOpen={isActivityModalOpen}
-        onClose={() => setIsActivityModalOpen(false)}
-        title="Full Biometric & Web Activity Logs"
-        description="All timestamped check-in and check-out logs for the past 30 days."
-        size="md"
-      >
-        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 text-xs">
-          {[
-            { title: 'Checked Out', time: 'Today, 06:08 PM', type: 'out' },
-            { title: 'Checked In', time: 'Today, 09:12 AM', type: 'in' },
-            { title: 'Checked Out', time: 'Yesterday, 06:15 PM', type: 'out' },
-            { title: 'Checked In', time: 'Yesterday, 09:05 AM', type: 'in' },
-            { title: 'Leave Approved', time: 'Apr 05, 2025 • Casual Leave', type: 'leave' },
-            { title: 'Checked Out', time: 'Apr 03, 06:00 PM', type: 'out' },
-            { title: 'Checked In', time: 'Apr 03, 08:58 AM', type: 'in' },
-          ].map((item, idx) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-dark-border"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold',
-                    item.type === 'in'
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : item.type === 'out'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-purple-100 text-purple-700'
-                  )}
-                >
-                  {item.type === 'in' ? '✓' : item.type === 'out' ? '→' : '★'}
+      {/* 0. Day Inspector Modal (Opened when clicking a date cell) */}
+      {isDayInspectorOpen && (
+        <Modal
+          isOpen={isDayInspectorOpen}
+          onClose={() => setIsDayInspectorOpen(false)}
+          title={`Day Details: ${months[currentMonthIndex].split(' ')[0]} ${selectedDay}, 2026`}
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700">
+              <div>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">Attendance Status</span>
+                <Badge variant={currentSelectedDayData?.status === 'present' ? 'success' : 'warning'}>
+                  {currentSelectedDayData?.status ? currentSelectedDayData.status.toUpperCase() : 'NO RECORD'}
+                </Badge>
+              </div>
+              {currentSelectedDayData?.hours && (
+                <div className="text-right">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Total Hours</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white font-mono">{currentSelectedDayData.hours}</span>
                 </div>
-                <div>
-                  <p className="font-bold text-slate-800 dark:text-slate-200">{item.title}</p>
-                  <p className="text-[11px] text-slate-400">{item.time}</p>
+              )}
+            </div>
+
+            {/* Check-In & Check-Out Timestamps */}
+            {currentSelectedDayData?.checkIn ? (
+              <div className="grid grid-cols-2 gap-3 text-center">
+                <div className="p-3 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50">
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold block mb-1">Check In Time</span>
+                  <span className="font-black text-base text-slate-900 dark:text-white font-mono">{currentSelectedDayData.checkIn}</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50">
+                  <span className="text-xs text-blue-600 dark:text-blue-400 font-bold block mb-1">Check Out Time</span>
+                  <span className="font-black text-base text-slate-900 dark:text-white font-mono">{currentSelectedDayData.checkOut || '--:--'}</span>
                 </div>
               </div>
-              <span className="text-[10px] text-slate-400 uppercase font-semibold">Web Portal</span>
+            ) : (
+              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-xs text-amber-800 dark:text-amber-300">
+                No clock-in timestamp recorded for this date.
+              </div>
+            )}
+
+            {/* Day Scheduled Events */}
+            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                Scheduled Events ({currentSelectedDayEvents.length})
+              </span>
+              {currentSelectedDayEvents.length > 0 ? (
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {currentSelectedDayEvents.map(e => (
+                    <div key={e.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 text-xs flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-slate-900 dark:text-white block">{e.title}</span>
+                        <span className="text-[10px] text-slate-400 capitalize">{e.type}</span>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">{e.time}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-slate-400 italic block">No events scheduled for this day.</span>
+              )}
             </div>
-          ))}
-        </div>
-      </Modal>
+
+            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+              <Button onClick={() => setIsDayInspectorOpen(false)}>Close Details</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* 1. Add Event Modal */}
+      {isAddEventModalOpen && (
+        <Modal isOpen={isAddEventModalOpen} onClose={() => setIsAddEventModalOpen(false)} title="Add New Event">
+          <form onSubmit={handleAddEvent} className="space-y-4">
+            <Input label="Event Title" placeholder="e.g. Client Sync Meeting" value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} required />
+            <Input label="Day of Month (April)" type="number" min={1} max={30} value={newEvent.day} onChange={e => setNewEvent({ ...newEvent, day: Number(e.target.value) })} required />
+            <Input label="Event Time" placeholder="10:00 AM" value={newEvent.time} onChange={e => setNewEvent({ ...newEvent, time: e.target.value })} required />
+            <Select label="Type" value={newEvent.type} onChange={e => setNewEvent({ ...newEvent, type: e.target.value as any })} options={[
+              { value: 'meeting', label: 'Meeting' },
+              { value: 'review', label: 'Review' },
+              { value: 'birthday', label: 'Birthday' },
+              { value: 'holiday', label: 'Holiday' },
+            ]} />
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <Button variant="outline" type="button" onClick={() => setIsAddEventModalOpen(false)}>Cancel</Button>
+              <Button type="submit">Save Event</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* 2. Add Holiday Modal */}
+      {isAddHolidayModalOpen && (
+        <Modal isOpen={isAddHolidayModalOpen} onClose={() => setIsAddHolidayModalOpen(false)} title="Add Company Holiday">
+          <form onSubmit={handleAddHolidaySubmit} className="space-y-4">
+            <Input label="Holiday Title" placeholder="e.g. Independence Day" value={newHolidayTitle} onChange={e => setNewHolidayTitle(e.target.value)} required />
+            <Input label="Date" type="date" value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)} required />
+            <Select label="Type" value={newHolidayType} onChange={e => setNewHolidayType(e.target.value as any)} options={[
+              { value: 'Public', label: 'Public Holiday (Mandatory Paid)' },
+              { value: 'Company', label: 'Company Observance' },
+              { value: 'Optional', label: 'Floating / Optional' },
+            ]} />
+            <Input label="Office Scope" value={newHolidayScope} onChange={e => setNewHolidayScope(e.target.value)} placeholder="Global / All Offices" />
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Description</label>
+              <textarea rows={2} value={newHolidayDesc} onChange={e => setNewHolidayDesc(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none" placeholder="Holiday policy notes" />
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <Button variant="outline" type="button" onClick={() => setIsAddHolidayModalOpen(false)}>Cancel</Button>
+              <Button type="submit">Save Holiday</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* 3. Excel Import Modal */}
+      {isImportExcelModalOpen && (
+        <Modal isOpen={isImportExcelModalOpen} onClose={() => setIsImportExcelModalOpen(false)} title="Import Holidays from Excel">
+          <div className="space-y-4">
+            <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-xs space-y-1">
+              <span className="font-bold block text-slate-900">Bulk Excel Holiday Importer</span>
+              <p className="text-slate-600">Upload your holiday file (.xlsx, .csv). You can download our sample Excel template below.</p>
+              <button type="button" onClick={downloadSampleHolidayExcelTemplate} className="text-blue-600 font-bold hover:underline flex items-center gap-1 cursor-pointer">
+                <Download className="w-3.5 h-3.5" /> Download Sample Excel Template (.csv)
+              </button>
+            </div>
+
+            <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center relative bg-slate-50/50">
+              <input type="file" accept=".csv,.xlsx,.xls,.tsv" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+              <Upload className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+              <span className="text-xs font-bold block">{importFile ? importFile.name : 'Click or drop Excel / CSV file here'}</span>
+            </div>
+
+            {parsedRows.length > 0 && (
+              <div className="space-y-2 max-h-48 overflow-y-auto border p-2 rounded-xl text-xs">
+                <span className="font-bold block">Preview ({importStats.valid} Valid)</span>
+                {parsedRows.map((r, i) => (
+                  <div key={i} className="flex justify-between border-b py-1">
+                    <span>{r.name} ({r.date})</span>
+                    <span className={r.isValid ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>{r.isValid ? 'Valid' : r.errorReason}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+              <Button variant="outline" type="button" onClick={() => setIsImportExcelModalOpen(false)}>Cancel</Button>
+              <Button disabled={importStats.valid === 0} onClick={handleBulkImportConfirm} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Import {importStats.valid} Holidays</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* 4. Report Modal */}
+      {isReportModalOpen && (
+        <Modal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} title="Monthly Attendance Log Report">
+          <div className="space-y-3 text-xs">
+            <p className="text-slate-600">Exporting monthly summary report for April 2025.</p>
+            <div className="p-3 bg-slate-50 rounded-xl font-mono text-[11px]">
+              <div>Total Employees: 124</div>
+              <div>Present Average: 94.2%</div>
+              <div>Total Working Days: 21</div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setIsReportModalOpen(false)}>Close</Button>
+              <Button onClick={() => { showToast('Report downloaded as PDF.'); setIsReportModalOpen(false); }}>Download PDF</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
     </div>
   );
 };
+
+export default AttendancePage;

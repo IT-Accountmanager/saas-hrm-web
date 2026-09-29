@@ -241,9 +241,8 @@ function getRawNavigationForRole(role: UserRole, activeContext: 'organisation' |
             { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
             { title: 'Clock In / Out', href: '/clock-in', icon: Clock, badge: 'Live', moduleId: 'employee_hr_management' },
             { title: 'Project Management', href: '/tasks', icon: ListTodo, badge: '4', moduleId: 'organization_management', subModule: 'Project Management' },
-            { title: 'Calendar', href: '/calendar', icon: CalendarDays },
+            { title: 'Attendance & Calendar', href: '/attendance', icon: CalendarDays, moduleId: 'employee_hr_management' },
             { title: 'Timesheet', href: '/timesheets', icon: Clock, moduleId: 'employee_hr_management' },
-            { title: 'Attendance', href: '/attendance', icon: UserCheck, moduleId: 'employee_hr_management' },
             { title: 'Leave', href: '/leave', icon: CalendarDays, moduleId: 'employee_hr_management' },
           ]
         },

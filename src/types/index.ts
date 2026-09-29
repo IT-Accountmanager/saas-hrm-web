@@ -236,6 +236,8 @@ export interface Holiday {
   date: string;
   day: string;
   type: 'Public' | 'Optional' | 'Company';
+  location?: string;
+  description?: string;
 }
 
 export interface PayrollRecord {

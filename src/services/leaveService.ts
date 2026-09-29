@@ -72,12 +72,14 @@ export const leaveService = {
     const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
 
     const newHoliday: Holiday = {
-      id: `hol-${Date.now()}`,
+      id: `hol-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       organizationId: holidayData.organizationId || 'org-1',
       name: holidayData.name || 'Company Holiday',
       date: holidayData.date || new Date().toISOString().split('T')[0],
       day: holidayData.day || dayName,
       type: holidayData.type || 'Public',
+      location: holidayData.location || 'Global / All Offices',
+      description: holidayData.description || '',
     };
 
     const updated = [...list, newHoliday];
@@ -85,11 +87,33 @@ export const leaveService = {
     return newHoliday;
   },
 
+  bulkAddHolidays: async (holidays: Partial<Holiday>[]): Promise<Holiday[]> => {
+    const list = getFromStorage<Holiday[]>('holidays', INITIAL_HOLIDAYS);
+    const newItems: Holiday[] = holidays.map((h, idx) => {
+      const dateObj = new Date(h.date || new Date().toISOString().split('T')[0]);
+      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+      return {
+        id: `hol-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        organizationId: h.organizationId || 'org-1',
+        name: h.name || 'Imported Holiday',
+        date: h.date || new Date().toISOString().split('T')[0],
+        day: h.day || dayName,
+        type: (h.type as any) || 'Public',
+        location: h.location || 'Global / All Offices',
+        description: h.description || 'Imported from Excel',
+      };
+    });
+
+    const updated = [...list, ...newItems];
+    saveToStorage('holidays', updated);
+    return newItems;
+  },
+
   updateHoliday: async (id: string, holidayData: Partial<Holiday>): Promise<Holiday> => {
     const list = getFromStorage<Holiday[]>('holidays', INITIAL_HOLIDAYS);
     const index = list.findIndex(h => h.id === id);
     if (index === -1) throw new Error('Holiday not found');
-    
+
     list[index] = { ...list[index], ...holidayData };
     saveToStorage('holidays', list);
     return list[index];
