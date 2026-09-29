@@ -279,7 +279,7 @@ export const AppRoutes: React.FC = () => {
         <Route path="/operations/training" element={<ModuleGuard moduleId="employee_hr_management"><TrainingPage /></ModuleGuard>} />
 
         {/* Calendar, Reports, Settings & Support */}
-        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/calendar" element={<Navigate to="/attendance" replace />} />
         <Route path="/reports" element={<ModuleGuard moduleId="mis_analytics_dashboard"><ReportsPage /></ModuleGuard>} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/help" element={<HelpSupportPage />} />

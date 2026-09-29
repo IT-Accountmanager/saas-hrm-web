@@ -898,6 +898,16 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
 ];
 
 export const INITIAL_HOLIDAYS: Holiday[] = [
+  { id: 'hol-101', organizationId: 'org-1', name: 'New Year Day', date: '2026-01-01', day: 'Thursday', type: 'Public', location: 'Global / All Offices', description: 'Public Paid Holiday' },
+  { id: 'hol-102', organizationId: 'org-1', name: 'Republic Day', date: '2026-01-26', day: 'Monday', type: 'Public', location: 'India HQ', description: 'National Holiday' },
+  { id: 'hol-103', organizationId: 'org-1', name: 'Good Friday', date: '2026-04-03', day: 'Friday', type: 'Public', location: 'Global / All Offices', description: 'Public Paid Holiday' },
+  { id: 'hol-104', organizationId: 'org-1', name: 'Independence Day', date: '2026-08-15', day: 'Saturday', type: 'Public', location: 'India HQ', description: 'National Holiday' },
+  { id: 'hol-105', organizationId: 'org-1', name: 'Labor Day', date: '2026-09-07', day: 'Monday', type: 'Public', location: 'US Offices', description: 'Federal Holiday' },
+  { id: 'hol-106', organizationId: 'org-1', name: 'Teachers Day Observance', date: '2026-09-05', day: 'Saturday', type: 'Company', location: 'Global', description: 'Company Observance' },
+  { id: 'hol-107', organizationId: 'org-1', name: 'Hindi Diwas Holiday', date: '2026-09-14', day: 'Monday', type: 'Public', location: 'Global', description: 'Public Holiday' },
+  { id: 'hol-108', organizationId: 'org-1', name: 'Gandhi Jayanti', date: '2026-10-02', day: 'Friday', type: 'Public', location: 'Global', description: 'National Holiday' },
+  { id: 'hol-109', organizationId: 'org-1', name: 'Thanksgiving Day', date: '2026-11-26', day: 'Thursday', type: 'Public', location: 'US Offices', description: 'Public Holiday' },
+  { id: 'hol-110', organizationId: 'org-1', name: 'Christmas Day', date: '2026-12-25', day: 'Friday', type: 'Public', location: 'Global / All Offices', description: 'Public Paid Holiday' },
   { id: 'hol-1', organizationId: 'org-1', name: 'Memorial Day', date: '2024-05-27', day: 'Monday', type: 'Public' },
   { id: 'hol-2', organizationId: 'org-1', name: 'Juneteenth National Independence Day', date: '2024-06-19', day: 'Wednesday', type: 'Public' },
   { id: 'hol-3', organizationId: 'org-1', name: 'Independence Day', date: '2024-07-04', day: 'Thursday', type: 'Public' },

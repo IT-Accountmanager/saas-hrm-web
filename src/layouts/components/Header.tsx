@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
 import { UserRole } from '../../types';
+import { roleService } from '../../services/roleService';
+import { DynamicRole } from '../../types/rbac';
 import {
   Menu,
   Search,
@@ -69,10 +71,24 @@ export const Header: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const rolesList: { role: UserRole; title: string; desc: string; badgeColor: string }[] = [
-    { role: 'saas_owner', title: 'SaaS Platform Owner', desc: 'Manage tenants, MRR, subscriptions', badgeColor: 'bg-purple-100 text-purple-700' },
-    { role: 'org_owner', title: 'Organization Owner (CEO)', desc: 'Executive overview & company settings', badgeColor: 'bg-blue-100 text-blue-700' },
-    { role: 'org_admin', title: 'Organization Admin', desc: 'Full tenant admin capabilities', badgeColor: 'bg-indigo-100 text-indigo-700' },
+  const orgRoles: DynamicRole[] = roleService.getOrgRoles(currentOrg?.id || 'org-1');
+
+  const baseRoles: { role: UserRole; title: string; desc: string; badgeColor: string }[] = [
+    { role: 'saas_owner', title: 'SaaS Platform Owner (Super Admin)', desc: 'Manage tenants, MRR, subscriptions', badgeColor: 'bg-purple-100 text-purple-700' },
+    { role: 'org_admin', title: 'Organization Admin (Acme Admin)', desc: 'Fixed Org Admin & Dynamic Role Studio', badgeColor: 'bg-indigo-100 text-indigo-700' },
+  ];
+
+  // Add dynamic custom roles created by Org Admin
+  const customRoleItems = orgRoles
+    .filter((r: DynamicRole) => !r.isSystemDefault)
+    .map((r: DynamicRole) => ({
+      role: r.name.toLowerCase().replace(/\s+/g, '_') as UserRole,
+      title: `${r.name} (Custom Role)`,
+      desc: r.description || 'Dynamic custom organization role',
+      badgeColor: 'bg-blue-100 text-blue-700',
+    }));
+
+  const legacyRoles: { role: UserRole; title: string; desc: string; badgeColor: string }[] = [
     { role: 'hr_admin', title: 'HR Admin', desc: 'Complete HR suite & employee records', badgeColor: 'bg-emerald-100 text-emerald-700' },
     { role: 'hr_executive', title: 'HR Executive', desc: 'Daily attendance, leaves & onboarding', badgeColor: 'bg-teal-100 text-teal-700' },
     { role: 'recruiter', title: 'Talent Recruiter', desc: 'ATS pipeline & interview scheduling', badgeColor: 'bg-cyan-100 text-cyan-700' },
@@ -80,6 +96,8 @@ export const Header: React.FC = () => {
     { role: 'manager', title: 'Engineering Manager', desc: 'Team approvals & performance reviews', badgeColor: 'bg-orange-100 text-orange-700' },
     { role: 'employee', title: 'Employee Self-Service', desc: 'Clock-in, leaves, payslips & assets', badgeColor: 'bg-slate-100 text-slate-700' },
   ];
+
+  const rolesList = [...baseRoles, ...customRoleItems, ...legacyRoles];
 
   const currentPersona = ROLE_PERSONAS[currentRole] || ROLE_PERSONAS.employee;
 

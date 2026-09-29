@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { UserRole } from '../types';
 import { CorporateModuleId } from '../types/saasModules';
+import { roleService } from '../services/roleService';
 
 export interface NavItem {
   title: string;
@@ -240,9 +241,8 @@ function getRawNavigationForRole(role: UserRole, activeContext: 'organisation' |
             { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
             { title: 'Clock In / Out', href: '/clock-in', icon: Clock, badge: 'Live', moduleId: 'employee_hr_management' },
             { title: 'Project Management', href: '/tasks', icon: ListTodo, badge: '4', moduleId: 'organization_management', subModule: 'Project Management' },
-            { title: 'Calendar', href: '/calendar', icon: CalendarDays },
+            { title: 'Attendance & Calendar', href: '/attendance', icon: CalendarDays, moduleId: 'employee_hr_management' },
             { title: 'Timesheet', href: '/timesheets', icon: Clock, moduleId: 'employee_hr_management' },
-            { title: 'Attendance', href: '/attendance', icon: UserCheck, moduleId: 'employee_hr_management' },
             { title: 'Leave', href: '/leave', icon: CalendarDays, moduleId: 'employee_hr_management' },
           ]
         },
@@ -331,11 +331,12 @@ function getRawNavigationForRole(role: UserRole, activeContext: 'organisation' |
           ]
         },
         {
-          sectionTitle: 'RECRUITMENT',
+          sectionTitle: 'RECRUITMENT & WORKFORCE',
           items: [
-            { title: 'Job Openings', href: '/recruitment/jobs', icon: Briefcase, badge: '5', moduleId: 'recruitment_management', subModule: 'Job creation & publishing' },
-            { title: 'Candidates', href: '/recruitment/candidates', icon: Users, moduleId: 'recruitment_management', subModule: 'Candidate database' },
-            { title: 'Interviews', href: '/recruitment/interviews', icon: Calendar, moduleId: 'recruitment_management', subModule: 'Interview scheduling' },
+            { title: 'Recruitment Operating System', href: '/recruiter/dashboard', icon: LayoutDashboard, moduleId: 'recruitment_management' },
+            { title: 'Job Openings & Requisitions', href: '/recruiter/jobs', icon: Briefcase, badge: '5', moduleId: 'recruitment_management', subModule: 'Job creation & publishing' },
+            { title: 'Candidates & ATS Pipeline', href: '/recruiter/candidates', icon: Users, badge: '148', moduleId: 'recruitment_management', subModule: 'Candidate database' },
+            { title: 'Interviews, Offers & Handover', href: '/recruiter/interviews', icon: Calendar, badge: '6', moduleId: 'recruitment_management', subModule: 'Interview scheduling' },
           ]
         },
         {
@@ -357,20 +358,20 @@ function getRawNavigationForRole(role: UserRole, activeContext: 'organisation' |
         {
           sectionTitle: 'CRM & SALES',
           items: [
-            { title: 'CRM Dashboard', href: '/crm', icon: Target },
-            { title: 'Leads & Opportunities', href: '/crm/leads', icon: Users },
-            { title: 'Customers Master', href: '/crm/customers', icon: Building2 },
-            { title: 'Quotations', href: '/sales/quotations', icon: FileText },
-            { title: 'Sales Pipeline', href: '/sales/pipeline', icon: BarChart3 },
+            { title: 'CRM Dashboard', href: '/crm', icon: Target, moduleId: 'sales_crm', subModule: 'Lead tracking & CRM' },
+            { title: 'Leads & Opportunities', href: '/crm/leads', icon: Users, moduleId: 'sales_crm', subModule: 'Lead tracking & CRM' },
+            { title: 'Customers Master', href: '/crm/customers', icon: Building2, moduleId: 'sales_crm', subModule: 'Lead tracking & CRM' },
+            { title: 'Quotations', href: '/sales/quotations', icon: FileText, moduleId: 'sales_crm', subModule: 'Quotations & billing' },
+            { title: 'Sales Pipeline', href: '/sales/pipeline', icon: BarChart3, moduleId: 'sales_crm', subModule: 'Lead tracking & CRM' },
           ]
         },
         {
           sectionTitle: 'FINANCE & ERP',
           items: [
-            { title: 'Finance Dashboard', href: '/finance', icon: DollarSign },
-            { title: 'Billing & Invoices', href: '/billing/invoices', icon: Receipt },
-            { title: 'Costing & Budget', href: '/costing', icon: Compass },
-            { title: 'Procurement', href: '/procurement/vendors', icon: Package },
+            { title: 'Finance Dashboard', href: '/finance', icon: DollarSign, moduleId: 'finance_management', subModule: 'Chart of accounts' },
+            { title: 'Billing & Invoices', href: '/billing/invoices', icon: Receipt, moduleId: 'finance_management', subModule: 'Invoicing' },
+            { title: 'Costing & Budget', href: '/costing', icon: Compass, moduleId: 'business_costing_center', subModule: 'Cost centers & allocation' },
+            { title: 'Procurement', href: '/procurement/vendors', icon: Package, moduleId: 'procurement_purchase', subModule: 'Purchase orders' },
           ]
         },
         {
@@ -382,7 +383,7 @@ function getRawNavigationForRole(role: UserRole, activeContext: 'organisation' |
         {
           sectionTitle: 'SETTINGS',
           items: [
-            { title: 'Roles & Permissions', href: '/settings', icon: Settings },
+            { title: 'Roles & Permissions', href: '/settings', icon: Settings, moduleId: 'organization_management', subModule: 'User management' },
           ]
         }
       ];
@@ -393,10 +394,12 @@ export function getNavigationForRole(
   role: UserRole,
   subscribedModules?: CorporateModuleId[],
   disabledSubModules?: Record<string, string[]>,
-  activeContext: 'organisation' | 'superadmin' = 'superadmin'
+  activeContext: 'organisation' | 'superadmin' = 'superadmin',
+  currentUser?: any,
+  currentOrg?: any
 ): NavSection[] {
   const rawSections = getRawNavigationForRole(role, activeContext);
-  if (role === 'saas_owner' || !subscribedModules) {
+  if (role === 'saas_owner' && activeContext === 'superadmin') {
     return rawSections;
   }
 
@@ -405,30 +408,28 @@ export function getNavigationForRole(
       ...section,
       items: section.items
         .filter((item) => {
-          // 1. Check if parent module is subscribed
-          if (item.moduleId && !subscribedModules.includes(item.moduleId)) {
-            return false;
-          }
-          // 2. Check if specific submodule is disabled
-          if (item.moduleId && item.subModule && disabledSubModules?.[item.moduleId]) {
-            const disabledList = disabledSubModules[item.moduleId] || [];
-            if (disabledList.includes(item.subModule)) {
-              return false;
-            }
-          }
-          return true;
+          if (!item.moduleId) return true;
+          const perm = roleService.checkUserPermission(
+            currentUser || { role },
+            currentOrg || { subscribedModules, disabledSubModules },
+            item.moduleId,
+            item.subModule,
+            'read'
+          );
+          return perm.allowed;
         })
         .map((item) => {
           if (!item.children) return item;
-          // Filter children sub-items if any child has a subModule that is disabled
           const filteredChildren = item.children.filter((child) => {
-            if (item.moduleId && child.subModule && disabledSubModules?.[item.moduleId]) {
-              const disabledList = disabledSubModules[item.moduleId] || [];
-              if (disabledList.includes(child.subModule)) {
-                return false;
-              }
-            }
-            return true;
+            if (!item.moduleId) return true;
+            const perm = roleService.checkUserPermission(
+              currentUser || { role },
+              currentOrg || { subscribedModules, disabledSubModules },
+              item.moduleId,
+              child.subModule,
+              'read'
+            );
+            return perm.allowed;
           });
           return {
             ...item,

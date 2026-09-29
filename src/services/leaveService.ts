@@ -27,14 +27,14 @@ export const leaveService = {
       employeeName: data.employeeName || 'Rahul Sharma',
       employeeAvatar: data.employeeAvatar || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80',
       department: data.department || 'Engineering',
-      leaveType: data.leaveType || 'Casual',
+      leaveType: (data.leaveType as any) || 'Casual',
       startDate: data.startDate || new Date().toISOString().split('T')[0],
       endDate: data.endDate || new Date().toISOString().split('T')[0],
       days: data.days || 1,
       reason: data.reason || 'Personal leave',
-      status: 'Pending',
+      status: data.status || 'Pending',
       appliedDate: new Date().toISOString().split('T')[0],
-      approverName: 'Amit Verma',
+      approverName: data.approverName || 'Amit Verma',
     };
     const updated = [newRequest, ...list];
     saveToStorage('leave_requests', updated);
@@ -56,8 +56,73 @@ export const leaveService = {
     return list[index];
   },
 
+  deleteRequest: async (requestId: string): Promise<void> => {
+    const list = getFromStorage<LeaveRequest[]>('leave_requests', INITIAL_LEAVE_REQUESTS);
+    const filtered = list.filter(r => r.id !== requestId);
+    saveToStorage('leave_requests', filtered);
+  },
+
   getHolidays: async (): Promise<Holiday[]> => {
     return getFromStorage<Holiday[]>('holidays', INITIAL_HOLIDAYS);
+  },
+
+  addHoliday: async (holidayData: Partial<Holiday>): Promise<Holiday> => {
+    const list = getFromStorage<Holiday[]>('holidays', INITIAL_HOLIDAYS);
+    const dateObj = new Date(holidayData.date || new Date().toISOString().split('T')[0]);
+    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+
+    const newHoliday: Holiday = {
+      id: `hol-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      organizationId: holidayData.organizationId || 'org-1',
+      name: holidayData.name || 'Company Holiday',
+      date: holidayData.date || new Date().toISOString().split('T')[0],
+      day: holidayData.day || dayName,
+      type: holidayData.type || 'Public',
+      location: holidayData.location || 'Global / All Offices',
+      description: holidayData.description || '',
+    };
+
+    const updated = [...list, newHoliday];
+    saveToStorage('holidays', updated);
+    return newHoliday;
+  },
+
+  bulkAddHolidays: async (holidays: Partial<Holiday>[]): Promise<Holiday[]> => {
+    const list = getFromStorage<Holiday[]>('holidays', INITIAL_HOLIDAYS);
+    const newItems: Holiday[] = holidays.map((h, idx) => {
+      const dateObj = new Date(h.date || new Date().toISOString().split('T')[0]);
+      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+      return {
+        id: `hol-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        organizationId: h.organizationId || 'org-1',
+        name: h.name || 'Imported Holiday',
+        date: h.date || new Date().toISOString().split('T')[0],
+        day: h.day || dayName,
+        type: (h.type as any) || 'Public',
+        location: h.location || 'Global / All Offices',
+        description: h.description || 'Imported from Excel',
+      };
+    });
+
+    const updated = [...list, ...newItems];
+    saveToStorage('holidays', updated);
+    return newItems;
+  },
+
+  updateHoliday: async (id: string, holidayData: Partial<Holiday>): Promise<Holiday> => {
+    const list = getFromStorage<Holiday[]>('holidays', INITIAL_HOLIDAYS);
+    const index = list.findIndex(h => h.id === id);
+    if (index === -1) throw new Error('Holiday not found');
+
+    list[index] = { ...list[index], ...holidayData };
+    saveToStorage('holidays', list);
+    return list[index];
+  },
+
+  deleteHoliday: async (id: string): Promise<void> => {
+    const list = getFromStorage<Holiday[]>('holidays', INITIAL_HOLIDAYS);
+    const filtered = list.filter(h => h.id !== id);
+    saveToStorage('holidays', filtered);
   },
 
   getLeaveOverviewStats: async () => {
