@@ -22,7 +22,7 @@ export interface TimesheetRow {
   breakMins: number;
   totalHours: string;
   hoursDecimal: number;
-  status: 'Present' | 'Absent' | 'Holiday' | 'Leave';
+  status: 'Present' | 'Absent' | 'Leave';
   billable: boolean;
   taskNotes: string;
 }
@@ -130,14 +130,14 @@ function generateMonthDrafts(year: number, month: number, defaultProject: string
       displayDate,
       dayName,
       isWeekend,
-      status: isWeekend ? (dt.getDay() === 0 ? 'Holiday' : 'Absent') : 'Present',
+      status: isWeekend ? 'Absent' : 'Present',
       checkIn: '09:00',
       checkOut: '18:00',
       breakMins: '60',
       project: defaultProject,
       category: 'Frontend Development',
       billable: !isWeekend,
-      taskNotes: isWeekend ? (dt.getDay() === 0 ? 'Weekly Holiday' : 'Weekend Off') : '',
+      taskNotes: isWeekend ? 'Weekend Off' : '',
     });
   }
   return days;
@@ -168,12 +168,12 @@ export const TimesheetsPage: React.FC = () => {
   const now = new Date();
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1); // 1-based
-  const [filterStatus, setFilterStatus] = useState<'' | 'Present' | 'Absent' | 'Holiday' | 'Leave'>('');
+  const [filterStatus, setFilterStatus] = useState<'' | 'Present' | 'Absent' | 'Leave'>('');
   const [filterProject, setFilterProject] = useState('');
   const [filterBillable, setFilterBillable] = useState<'' | 'yes' | 'no'>('');
   const [filterSearch, setFilterSearch] = useState('');
 
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   const navigateMonth = (dir: -1 | 1) => {
     let m = filterMonth + dir;
@@ -237,7 +237,7 @@ export const TimesheetsPage: React.FC = () => {
     { id: '4', date: '25 Sep 2026', day: 'Thu', project: 'Client Mobile App', category: 'QA & Testing', checkIn: '09:00 AM', checkOut: '06:30 PM', breakMins: 60, totalHours: '8 h 30 m', hoursDecimal: 8.5, status: 'Present', billable: true, taskNotes: 'Executed full E2E test suite. Fixed 12 critical bugs. Documented all failing edge cases with steps to reproduce.' },
     { id: '5', date: '26 Sep 2026', day: 'Fri', project: 'Internal Operations', category: 'Client Meeting', checkIn: '09:10 AM', checkOut: '07:00 PM', breakMins: 60, totalHours: '8 h 50 m', hoursDecimal: 8.83, status: 'Present', billable: false, taskNotes: 'Sprint review with client stakeholders. Received signoff on milestone 3. Shared next sprint roadmap.' },
     { id: '6', date: '27 Sep 2026', day: 'Sat', project: 'SASS HRMS Portal', category: 'Documentation', checkIn: '—', checkOut: '—', breakMins: 0, totalHours: '0 h 00 m', hoursDecimal: 0, status: 'Absent', billable: false, taskNotes: 'Weekend Off' },
-    { id: '7', date: '28 Sep 2026', day: 'Sun', project: 'SASS HRMS Portal', category: 'Documentation', checkIn: '—', checkOut: '—', breakMins: 0, totalHours: '0 h 00 m', hoursDecimal: 0, status: 'Holiday', billable: false, taskNotes: 'Weekly Holiday' },
+
   ]);
 
   // ── filteredRows (derived from rows — must be after rows state) ─────────────
@@ -250,7 +250,7 @@ export const TimesheetsPage: React.FC = () => {
     if (filterSearch) {
       const q = filterSearch.toLowerCase();
       if (!row.date.toLowerCase().includes(q) && !row.project.toLowerCase().includes(q) &&
-          !row.category.toLowerCase().includes(q) && !row.taskNotes.toLowerCase().includes(q)) return false;
+        !row.category.toLowerCase().includes(q) && !row.taskNotes.toLowerCase().includes(q)) return false;
     }
     return true;
   });
@@ -339,13 +339,18 @@ export const TimesheetsPage: React.FC = () => {
   const handleImportConfirm = () => {
     const valid = parsedRows.filter(r => r.isValid);
     if (!valid.length) return;
-    const imported: TimesheetRow[] = valid.map((r, i) => ({
-      id: (Date.now() + i).toString(),
-      date: r.date, day: r.day, project: r.project, category: r.category,
-      checkIn: r.checkIn, checkOut: r.checkOut, breakMins: r.breakMins,
-      totalHours: r.totalHours, hoursDecimal: r.hoursDecimal,
-      status: r.status, billable: r.billable, taskNotes: r.taskNotes,
-    }));
+    const imported: TimesheetRow[] = valid.map((r, i) => {
+      // Holiday no longer exists in Timesheets — treat as Absent
+      const safeStatus: TimesheetRow['status'] =
+        r.status === 'Holiday' ? 'Absent' : (r.status as TimesheetRow['status']);
+      return {
+        id: (Date.now() + i).toString(),
+        date: r.date, day: r.day, project: r.project, category: r.category,
+        checkIn: r.checkIn, checkOut: r.checkOut, breakMins: r.breakMins,
+        totalHours: r.totalHours, hoursDecimal: r.hoursDecimal,
+        status: safeStatus, billable: r.billable, taskNotes: r.taskNotes,
+      };
+    });
     setRows([...imported, ...rows]);
     setIsImportModalOpen(false);
     setImportFile(null);
@@ -492,12 +497,12 @@ export const TimesheetsPage: React.FC = () => {
                 {monthlyDrafts.map((d, idx) => {
                   const bm = parseInt(d.breakMins || '0', 10);
                   const { formatted } = computeHours(d.checkIn, d.checkOut, bm, d.status);
-                  const isOff = d.status === 'Absent' || d.status === 'Holiday';
+                  const isOff = d.status === 'Absent';
                   return (
                     <tr key={d.isoDate}
                       className={`rounded-2xl transition-colors ${d.isWeekend
-                          ? 'bg-slate-50/80 dark:bg-slate-900/40'
-                          : 'bg-white dark:bg-[#0F172A] shadow-xs hover:shadow-sm'
+                        ? 'bg-slate-50/80 dark:bg-slate-900/40'
+                        : 'bg-white dark:bg-[#0F172A] shadow-xs hover:shadow-sm'
                         }`}
                     >
                       {/* # */}
@@ -512,15 +517,14 @@ export const TimesheetsPage: React.FC = () => {
 
                       {/* Status */}
                       <td className="py-2 pr-2">
-                        <select value={d.status} onChange={e => updateDraft(idx, { status: e.target.value as TimesheetRow['status'], taskNotes: (e.target.value === 'Absent' ? 'Absent' : e.target.value === 'Holiday' ? 'Holiday Off' : d.taskNotes) })}
+                        <select value={d.status} onChange={e => updateDraft(idx, { status: e.target.value as TimesheetRow['status'], taskNotes: (e.target.value === 'Absent' ? 'Absent' : d.taskNotes) })}
                           className={`h-8 px-2 rounded-xl border text-[11px] font-bold cursor-pointer focus:outline-none ${d.status === 'Present' ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900'
-                              : d.status === 'Absent' ? 'border-rose-200 bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900'
-                                : d.status === 'Leave' ? 'border-amber-200 bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900'
-                                  : 'border-purple-200 bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900'
+                            : d.status === 'Absent' ? 'border-rose-200 bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900'
+                              : d.status === 'Leave' ? 'border-amber-200 bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900'
+                                : 'border-purple-200 bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900'
                             }`}>
                           <option value="Present">Present</option>
                           <option value="Absent">Absent</option>
-                          <option value="Holiday">Holiday</option>
                           <option value="Leave">Leave</option>
                         </select>
                       </td>
@@ -582,8 +586,8 @@ export const TimesheetsPage: React.FC = () => {
                           placeholder={isOff ? 'Off / Holiday' : 'Describe work done today…'}
                           required={!isOff}
                           className={`h-8 px-3 rounded-xl border text-[11px] w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-white ${!isOff && !d.taskNotes
-                              ? 'border-rose-300 dark:border-rose-700'
-                              : 'border-slate-200 dark:border-slate-700'
+                            ? 'border-rose-300 dark:border-rose-700'
+                            : 'border-slate-200 dark:border-slate-700'
                             }`}
                         />
                       </td>
@@ -727,9 +731,8 @@ export const TimesheetsPage: React.FC = () => {
                   const active = m === filterMonth && y === filterYear;
                   return (
                     <button key={offset} onClick={() => { setFilterMonth(m); setFilterYear(y); }}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
-                        active ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}>
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${active ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}>
                       {MONTHS[m - 1]} {y !== now.getFullYear() ? y : ''}
                     </button>
                   );
@@ -757,7 +760,6 @@ export const TimesheetsPage: React.FC = () => {
                 <option value="">All Statuses</option>
                 <option value="Present">Present</option>
                 <option value="Absent">Absent</option>
-                <option value="Holiday">Holiday</option>
                 <option value="Leave">Leave</option>
               </select>
 
@@ -1141,11 +1143,11 @@ export const TimesheetsPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">Check In <span className="text-rose-500">*</span></label>
-                  <input type="time" required value={form.checkIn} onChange={e => setForm(f => ({ ...f, checkIn: e.target.value }))} className={inp} disabled={form.status === 'Absent' || form.status === 'Holiday'} />
+                  <input type="time" required value={form.checkIn} onChange={e => setForm(f => ({ ...f, checkIn: e.target.value }))} className={inp} disabled={form.status === 'Absent'} />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">Check Out <span className="text-rose-500">*</span></label>
-                  <input type="time" required value={form.checkOut} onChange={e => setForm(f => ({ ...f, checkOut: e.target.value }))} className={inp} disabled={form.status === 'Absent' || form.status === 'Holiday'} />
+                  <input type="time" required value={form.checkOut} onChange={e => setForm(f => ({ ...f, checkOut: e.target.value }))} className={inp} disabled={form.status === 'Absent'} />
                 </div>
               </div>
 
@@ -1182,7 +1184,6 @@ export const TimesheetsPage: React.FC = () => {
                 <select required value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as TimesheetRow['status'] }))} className={inp}>
                   <option value="Present">Present</option>
                   <option value="Absent">Absent</option>
-                  <option value="Holiday">Holiday</option>
                   <option value="Leave">Leave</option>
                 </select>
               </div>
